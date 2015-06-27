@@ -6,8 +6,8 @@
  */
 
 #include "ifs/PKey.h"
-#include <polarssl/polarssl/config.h>
-#include <polarssl/polarssl/pk.h>
+#include <mbedtls/polarssl/config.h>
+#include <mbedtls/polarssl/pk.h>
 
 #ifndef _fj_PKEY_H
 #define _fj_PKEY_H
@@ -36,6 +36,7 @@ public:
     virtual result_t clone(obj_ptr<PKey_base> &retVal);
     virtual result_t importKey(Buffer_base *DerKey, const char *password);
     virtual result_t importKey(const char *pemKey, const char *password);
+    virtual result_t importFile(const char* filename, const char* password);
     virtual result_t exportPem(std::string &retVal);
     virtual result_t exportDer(obj_ptr<Buffer_base> &retVal);
     virtual result_t encrypt(Buffer_base *data, obj_ptr<Buffer_base> &retVal, exlib::AsyncEvent *ac);

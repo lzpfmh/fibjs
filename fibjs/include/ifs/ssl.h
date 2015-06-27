@@ -22,6 +22,7 @@ class SslHandler_base;
 class SslServer_base;
 class Stream_base;
 class X509Cert_base;
+class PKey_base;
 
 class ssl_base : public object_base
 {
@@ -41,6 +42,8 @@ public:
 public:
 	// ssl_base
 	static result_t connect(const char* url, obj_ptr<Stream_base>& retVal, exlib::AsyncEvent* ac);
+	static result_t setClientCert(X509Cert_base* crt, PKey_base* key);
+	static result_t loadClientCertFile(const char* crtFile, const char* keyFile, const char* password);
 	static result_t get_ca(obj_ptr<X509Cert_base>& retVal);
 	static result_t get_verification(int32_t& retVal);
 	static result_t set_verification(int32_t newVal);
@@ -54,6 +57,8 @@ public:
 	static void s_get_BADCERT_CN_MISMATCH(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &args);
 	static void s_get_BADCERT_NOT_TRUSTED(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &args);
 	static void s_connect(const v8::FunctionCallbackInfo<v8::Value>& args);
+	static void s_setClientCert(const v8::FunctionCallbackInfo<v8::Value>& args);
+	static void s_loadClientCertFile(const v8::FunctionCallbackInfo<v8::Value>& args);
 	static void s_get_ca(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &args);
 	static void s_get_verification(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value> &args);
 	static void s_set_verification(v8::Local<v8::String> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &args);
@@ -69,6 +74,7 @@ public:
 #include "SslServer.h"
 #include "Stream.h"
 #include "X509Cert.h"
+#include "PKey.h"
 
 namespace fibjs
 {
@@ -76,7 +82,9 @@ namespace fibjs
 	{
 		static ClassData::ClassMethod s_method[] = 
 		{
-			{"connect", s_connect, true}
+			{"connect", s_connect, true},
+			{"setClientCert", s_setClientCert, true},
+			{"loadClientCertFile", s_loadClientCertFile, true}
 		};
 
 		static ClassData::ClassObject s_object[] = 
@@ -102,7 +110,7 @@ namespace fibjs
 		static ClassData s_cd = 
 		{ 
 			"ssl", NULL, 
-			1, s_method, 3, s_object, 9, s_property, NULL, NULL,
+			3, s_method, 3, s_object, 9, s_property, NULL, NULL,
 			NULL
 		};
 
@@ -202,6 +210,31 @@ namespace fibjs
 		hr = ac_connect(v0, vr);
 
 		METHOD_RETURN();
+	}
+
+	inline void ssl_base::s_setClientCert(const v8::FunctionCallbackInfo<v8::Value>& args)
+	{
+		METHOD_ENTER(2, 2);
+
+		ARG(obj_ptr<X509Cert_base>, 0);
+		ARG(obj_ptr<PKey_base>, 1);
+
+		hr = setClientCert(v0, v1);
+
+		METHOD_VOID();
+	}
+
+	inline void ssl_base::s_loadClientCertFile(const v8::FunctionCallbackInfo<v8::Value>& args)
+	{
+		METHOD_ENTER(3, 2);
+
+		ARG(arg_string, 0);
+		ARG(arg_string, 1);
+		OPT_ARG(arg_string, 2, "");
+
+		hr = loadClientCertFile(v0, v1, v2);
+
+		METHOD_VOID();
 	}
 
 }

@@ -9,11 +9,11 @@
 #define _fj_SSL_H_
 
 #include "ifs/ssl.h"
-#include <polarssl/polarssl/config.h>
-#include <polarssl/polarssl/entropy.h>
-#include <polarssl/polarssl/ctr_drbg.h>
-#include <polarssl/polarssl/ssl.h>
-#include <polarssl/polarssl/ssl_cache.h>
+#include <mbedtls/polarssl/config.h>
+#include <mbedtls/polarssl/entropy.h>
+#include <mbedtls/polarssl/ctr_drbg.h>
+#include <mbedtls/polarssl/ssl.h>
+#include <mbedtls/polarssl/ssl_cache.h>
 #include "X509Cert.h"
 
 namespace fibjs
@@ -53,6 +53,9 @@ public:
     entropy_context entropy;
     ctr_drbg_context ctr_drbg;
     int32_t m_authmode;
+
+    obj_ptr<X509Cert_base> m_crt;
+    obj_ptr<PKey_base> m_key;
 
 private:
     obj_ptr<X509Cert> m_ca;
