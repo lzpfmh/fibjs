@@ -24,16 +24,16 @@ namespace fibjs
 
 result_t os_base::uptime(double &retVal)
 {
-    static volatile int no_clock_boottime;
+    static volatile int32_t no_clock_boottime;
     struct timespec now;
-    int r;
-    int (*fngettime)(clockid_t, struct timespec *);
+    int32_t r;
+    int32_t (*fngettime)(clockid_t, struct timespec *);
 
     void *handle = dlopen ("librt.so", RTLD_LAZY);
     if (!handle)
         return CHECK_ERROR(LastError());
 
-    fngettime = (int (*)(clockid_t, struct timespec *))dlsym(handle, "clock_gettime");
+    fngettime = (int32_t (*)(clockid_t, struct timespec *))dlsym(handle, "clock_gettime");
     if (!fngettime)
     {
         dlclose(handle);
@@ -74,11 +74,11 @@ result_t os_base::loadavg(v8::Local<v8::Array> &retVal)
     avg[1] = (double) info.loads[1] / 65536.0;
     avg[2] = (double) info.loads[2] / 65536.0;
 
-    Isolate &isolate = Isolate::now();
-    retVal = v8::Array::New(isolate.isolate, 3);
-    retVal->Set(0, v8::Number::New(isolate.isolate, avg[0]));
-    retVal->Set(1, v8::Number::New(isolate.isolate, avg[1]));
-    retVal->Set(2, v8::Number::New(isolate.isolate, avg[2]));
+    Isolate* isolate = Isolate::now();
+    retVal = v8::Array::New(isolate->m_isolate, 3);
+    retVal->Set(0, v8::Number::New(isolate->m_isolate, avg[0]));
+    retVal->Set(1, v8::Number::New(isolate->m_isolate, avg[1]));
+    retVal->Set(2, v8::Number::New(isolate->m_isolate, avg[2]));
 
     return 0;
 }
@@ -97,7 +97,7 @@ result_t os_base::freemem(int64_t &retVal)
 
 result_t os_base::CPUs(int32_t &retVal)
 {
-    static int cpus = 0;
+    static int32_t cpus = 0;
 
     if (cpus > 0)
     {
@@ -105,7 +105,7 @@ result_t os_base::CPUs(int32_t &retVal)
         return 0;
     }
 
-    int numcpus = 0;
+    int32_t numcpus = 0;
     char line[512];
     FILE *fpModel = fopen("/proc/cpuinfo", "r");
 
@@ -126,14 +126,14 @@ result_t os_base::CPUs(int32_t &retVal)
 
 result_t os_base::CPUInfo(v8::Local<v8::Array> &retVal)
 {
-    Isolate &isolate = Isolate::now();
-    retVal = v8::Array::New(isolate.isolate);
+    Isolate* isolate = Isolate::now();
+    retVal = v8::Array::New(isolate->m_isolate);
 
     v8::Local<v8::Object> cpuinfo;
     v8::Local<v8::Object> cputimes;
-    unsigned int ticks = (unsigned int) sysconf(_SC_CLK_TCK), multiplier =
-                             ((uint64_t) 1000L / ticks), cpuspeed;
-    int numcpus = 0, i = 0;
+    uint32_t ticks = (uint32_t) sysconf(_SC_CLK_TCK), multiplier =
+                         ((uint64_t) 1000L / ticks), cpuspeed;
+    int32_t numcpus = 0, i = 0;
     unsigned long long ticks_user, ticks_sys, ticks_idle, ticks_nice,
              ticks_intr;
     char line[512], speedPath[256], model[512] = "";
@@ -192,24 +192,24 @@ result_t os_base::CPUInfo(v8::Local<v8::Array> &retVal)
                 fclose(fpSpeed);
             }
 
-            cpuinfo = v8::Object::New(isolate.isolate);
-            cputimes = v8::Object::New(isolate.isolate);
-            cputimes->Set(v8::String::NewFromUtf8(isolate.isolate, "user"),
-                          v8::Number::New(isolate.isolate, ticks_user * multiplier));
-            cputimes->Set(v8::String::NewFromUtf8(isolate.isolate, "nice"),
-                          v8::Number::New(isolate.isolate, ticks_nice * multiplier));
-            cputimes->Set(v8::String::NewFromUtf8(isolate.isolate, "sys"),
-                          v8::Number::New(isolate.isolate, ticks_sys * multiplier));
-            cputimes->Set(v8::String::NewFromUtf8(isolate.isolate, "idle"),
-                          v8::Number::New(isolate.isolate, ticks_idle * multiplier));
-            cputimes->Set(v8::String::NewFromUtf8(isolate.isolate, "irq"),
-                          v8::Number::New(isolate.isolate, ticks_intr * multiplier));
+            cpuinfo = v8::Object::New(isolate->m_isolate);
+            cputimes = v8::Object::New(isolate->m_isolate);
+            cputimes->Set(v8::String::NewFromUtf8(isolate->m_isolate, "user"),
+                          v8::Number::New(isolate->m_isolate, ticks_user * multiplier));
+            cputimes->Set(v8::String::NewFromUtf8(isolate->m_isolate, "nice"),
+                          v8::Number::New(isolate->m_isolate, ticks_nice * multiplier));
+            cputimes->Set(v8::String::NewFromUtf8(isolate->m_isolate, "sys"),
+                          v8::Number::New(isolate->m_isolate, ticks_sys * multiplier));
+            cputimes->Set(v8::String::NewFromUtf8(isolate->m_isolate, "idle"),
+                          v8::Number::New(isolate->m_isolate, ticks_idle * multiplier));
+            cputimes->Set(v8::String::NewFromUtf8(isolate->m_isolate, "irq"),
+                          v8::Number::New(isolate->m_isolate, ticks_intr * multiplier));
 
             if (model[0])
-                cpuinfo->Set(v8::String::NewFromUtf8(isolate.isolate, "model"), v8::String::NewFromUtf8(isolate.isolate, model));
-            cpuinfo->Set(v8::String::NewFromUtf8(isolate.isolate, "speed"), v8::Number::New(isolate.isolate, cpuspeed));
+                cpuinfo->Set(v8::String::NewFromUtf8(isolate->m_isolate, "model"), v8::String::NewFromUtf8(isolate->m_isolate, model));
+            cpuinfo->Set(v8::String::NewFromUtf8(isolate->m_isolate, "speed"), v8::Number::New(isolate->m_isolate, cpuspeed));
 
-            cpuinfo->Set(v8::String::NewFromUtf8(isolate.isolate, "times"), cputimes);
+            cpuinfo->Set(v8::String::NewFromUtf8(isolate->m_isolate, "times"), cputimes);
             retVal->Set(i++, cpuinfo);
         }
         fclose(fpStat);
@@ -236,12 +236,12 @@ result_t os_base::memoryUsage(v8::Local<v8::Object> &retVal)
     size_t rss = 0;
 
     FILE *f;
-    int itmp;
+    int32_t itmp;
     char ctmp;
-    unsigned int utmp;
+    uint32_t utmp;
     size_t page_size = getpagesize();
     char *cbuf;
-    int foundExeEnd;
+    int32_t foundExeEnd;
     static char buf[MAXPATHLEN + 1];
 
     f = fopen("/proc/self/stat", "r");
@@ -385,20 +385,20 @@ result_t os_base::memoryUsage(v8::Local<v8::Object> &retVal)
 
 error: fclose(f);
 
-    Isolate &isolate = Isolate::now();
-    v8::Local<v8::Object> info = v8::Object::New(isolate.isolate);
+    Isolate* isolate = Isolate::now();
+    v8::Local<v8::Object> info = v8::Object::New(isolate->m_isolate);
 
     v8::HeapStatistics v8_heap_stats;
-    isolate.isolate->GetHeapStatistics(&v8_heap_stats);
-    info->Set(v8::String::NewFromUtf8(isolate.isolate, "rss"), v8::Integer::New(isolate.isolate, (int32_t)rss));
-    info->Set(v8::String::NewFromUtf8(isolate.isolate, "heapTotal"),
-              v8::Integer::New(isolate.isolate, (int32_t)v8_heap_stats.total_heap_size()));
-    info->Set(v8::String::NewFromUtf8(isolate.isolate, "heapUsed"),
-              v8::Integer::New(isolate.isolate, (int32_t)v8_heap_stats.used_heap_size()));
+    isolate->m_isolate->GetHeapStatistics(&v8_heap_stats);
+    info->Set(v8::String::NewFromUtf8(isolate->m_isolate, "rss"), v8::Number::New(isolate->m_isolate, (double)rss));
+    info->Set(v8::String::NewFromUtf8(isolate->m_isolate, "heapTotal"),
+              v8::Number::New(isolate->m_isolate, (double)v8_heap_stats.total_heap_size()));
+    info->Set(v8::String::NewFromUtf8(isolate->m_isolate, "heapUsed"),
+              v8::Number::New(isolate->m_isolate, (double)v8_heap_stats.used_heap_size()));
 
     v8::Local<v8::Object> objs;
     object_base::class_info().dump(objs);
-    info->Set(v8::String::NewFromUtf8(isolate.isolate, "nativeObjects"), objs);
+    info->Set(v8::String::NewFromUtf8(isolate->m_isolate, "nativeObjects"), objs);
 
     retVal = info;
 

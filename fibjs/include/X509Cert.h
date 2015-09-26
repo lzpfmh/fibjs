@@ -6,7 +6,7 @@
  */
 
 #include "ifs/X509Cert.h"
-#include <mbedtls/polarssl/x509_crt.h>
+#include <mbedtls/mbedtls/x509_crt.h>
 
 #ifndef _fj_X509CERT_H
 #define _fj_X509CERT_H
@@ -18,7 +18,7 @@ class X509Cert : public X509Cert_base
 {
 public:
     X509Cert();
-    X509Cert(X509Cert *root, int no);
+    X509Cert(X509Cert *root, int32_t no);
     ~X509Cert();
 
 public:
@@ -27,7 +27,7 @@ public:
     virtual result_t load(const char *txtCert);
     virtual result_t loadFile(const char *filename);
     virtual result_t loadRootCerts();
-    virtual result_t verify(X509Cert_base *cert, bool &retVal, exlib::AsyncEvent *ac);
+    virtual result_t verify(X509Cert_base *cert, bool &retVal, AsyncEvent *ac);
     virtual result_t dump(v8::Local<v8::Array> &retVal);
     virtual result_t clear();
     virtual result_t get_version(int32_t &retVal);
@@ -45,7 +45,7 @@ public:
 
 
 public:
-    result_t load(const x509_crt *crt);
+    result_t load(const mbedtls_x509_crt *crt);
 
 public:
     struct _name
@@ -58,10 +58,10 @@ public:
     static _name g_types[];
 
 public:
-    x509_crt m_crt;
+    mbedtls_x509_crt m_crt;
 
 private:
-    x509_crt *get_crt();
+    mbedtls_x509_crt *get_crt();
 
 private:
     struct _cert
@@ -74,7 +74,8 @@ private:
 
 private:
     obj_ptr<X509Cert> m_root;
-    int m_no;
+    int32_t m_no;
+    bool m_rootLoaded;
 };
 
 }

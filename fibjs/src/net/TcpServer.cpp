@@ -88,19 +88,19 @@ result_t TcpServer::create(const char *addr, int32_t port,
     return 0;
 }
 
-result_t TcpServer::run(exlib::AsyncEvent *ac)
+result_t TcpServer::run(AsyncEvent *ac)
 {
-    class asyncInvoke: public asyncState
+    class asyncInvoke: public AsyncState
     {
     public:
         asyncInvoke(TcpServer *pThis, Socket_base *pSock) :
-            asyncState(NULL), m_pThis(pThis), m_sock(pSock), m_obj(pSock)
+            AsyncState(NULL), m_pThis(pThis), m_sock(pSock), m_obj(pSock)
         {
             set(invoke);
         }
 
     public:
-        static int invoke(asyncState *pState, int n)
+        static int32_t invoke(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
 
@@ -108,7 +108,7 @@ result_t TcpServer::run(exlib::AsyncEvent *ac)
             return mq_base::invoke(pThis->m_pThis->m_hdlr, pThis->m_obj, pThis);
         }
 
-        static int close(asyncState *pState, int n)
+        static int32_t close(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
 
@@ -118,7 +118,7 @@ result_t TcpServer::run(exlib::AsyncEvent *ac)
             return pThis->m_sock->close(pThis);
         }
 
-        virtual int error(int v)
+        virtual int32_t error(int32_t v)
         {
             asyncLog(console_base::_ERROR, "TcpServer: " + getResultMessage(v));
             set(close);
@@ -131,17 +131,17 @@ result_t TcpServer::run(exlib::AsyncEvent *ac)
         obj_ptr<object_base> m_obj;
     };
 
-    class asyncAccept: public asyncState
+    class asyncAccept: public AsyncState
     {
     public:
-        asyncAccept(TcpServer *pThis, exlib::AsyncEvent *ac) :
-            asyncState(ac), m_pThis(pThis)
+        asyncAccept(TcpServer *pThis, AsyncEvent *ac) :
+            AsyncState(ac), m_pThis(pThis)
         {
             set(accept);
         }
 
     public:
-        static int accept(asyncState *pState, int n)
+        static int32_t accept(AsyncState *pState, int32_t n)
         {
             asyncAccept *pThis = (asyncAccept *) pState;
 
@@ -149,7 +149,7 @@ result_t TcpServer::run(exlib::AsyncEvent *ac)
             return pThis->m_pThis->m_socket->accept(pThis->m_retVal, pThis);
         }
 
-        static int invoke(asyncState *pState, int n)
+        static int32_t invoke(AsyncState *pState, int32_t n)
         {
             asyncAccept *pThis = (asyncAccept *) pState;
 
@@ -161,7 +161,7 @@ result_t TcpServer::run(exlib::AsyncEvent *ac)
             return pThis->m_pThis->m_socket->accept(pThis->m_retVal, pThis);
         }
 
-        virtual int error(int v)
+        virtual int32_t error(int32_t v)
         {
             asyncLog(console_base::_ERROR, "TcpServer: " + getResultMessage(v));
             return v;
@@ -187,28 +187,20 @@ result_t TcpServer::run(exlib::AsyncEvent *ac)
 
 result_t TcpServer::asyncRun()
 {
-    class asyncCall: public asyncState
+    class asyncCall: public AsyncState
     {
     public:
         asyncCall(TcpServer *pThis) :
-            asyncState(NULL), m_pThis(pThis)
+            AsyncState(NULL), m_pThis(pThis)
         {
             set(accept);
         }
 
     public:
-        static int accept(asyncState *pState, int n)
+        static int32_t accept(AsyncState *pState, int32_t n)
         {
             asyncCall *pThis = (asyncCall *) pState;
-
-            pThis->set(end);
             return pThis->m_pThis->run(pThis);
-        }
-
-        static int end(asyncState *pState, int n)
-        {
-            asyncCall *pThis = (asyncCall *) pState;
-            return pThis->done();
         }
 
     private:
@@ -225,7 +217,7 @@ result_t TcpServer::asyncRun()
     return 0;
 }
 
-result_t TcpServer::stop(exlib::AsyncEvent *ac)
+result_t TcpServer::stop(AsyncEvent *ac)
 {
     if (!m_socket)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
@@ -250,7 +242,7 @@ result_t TcpServer::get_handler(obj_ptr<Handler_base> &retVal)
 
 result_t TcpServer::set_handler(Handler_base *newVal)
 {
-    wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now().isolate, "handler"), newVal->wrap());
+    wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now()->m_isolate, "handler"), newVal->wrap());
     m_hdlr = newVal;
     return 0;
 }

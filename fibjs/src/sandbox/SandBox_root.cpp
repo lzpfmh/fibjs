@@ -26,6 +26,8 @@
 #include "ifs/crypto.h"
 #include "ifs/ssl.h"
 
+#include "ifs/websocket.h"
+
 #include "ifs/mq.h"
 #include "ifs/xml.h"
 
@@ -33,6 +35,7 @@
 #include "ifs/zlib.h"
 
 #include "ifs/gd.h"
+#include "ifs/profiler.h"
 
 #include "ifs/uuid.h"
 #include "ifs/re.h"
@@ -57,7 +60,7 @@ void SandBox::initRoot()
 
     InstallNativeModule("test", test_base::class_info());
     InstallNativeModule("assert", assert_base::class_info());
-    InstallModule("expect", v8::Function::New(Isolate::now().isolate, test_base::s_expect));
+    InstallModule("expect", createV8Function("expect", Isolate::now()->m_isolate, test_base::s_expect));
 
     InstallNativeModule("path", path_base::class_info());
 
@@ -69,6 +72,8 @@ void SandBox::initRoot()
     InstallNativeModule("fs", fs_base::class_info());
     InstallNativeModule("os", os_base::class_info());
     InstallNativeModule("net", net_base::class_info());
+
+    InstallNativeModule("websocket", websocket_base::class_info());
 
     InstallNativeModule("hash", hash_base::class_info());
     InstallNativeModule("crypto", crypto_base::class_info());
@@ -85,6 +90,7 @@ void SandBox::initRoot()
 
     InstallNativeModule("gd", gd_base::class_info());
 
+    InstallNativeModule("profiler", profiler_base::class_info());
     InstallNativeModule("util", util_base::class_info());
 }
 

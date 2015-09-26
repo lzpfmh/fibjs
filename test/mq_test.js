@@ -28,6 +28,14 @@ describe("mq", function() {
 		var m = new mq.Message();
 	});
 
+	var ss = [];
+
+	after(function() {
+		ss.forEach(function(s) {
+			s.close();
+		});
+	});
+
 	describe("function handler", function() {
 		var n = 0;
 
@@ -347,28 +355,6 @@ describe("mq", function() {
 			return aw;
 		}), m);
 		assert.equal(n, 400);
-	});
-
-	it("PacketHandler", function() {
-		var s = new net.TcpServer(9876, new mq.PacketHandler(function(r) {
-			var d = r.body.readAll();
-			r.clear();
-			r.response.body.write(d.toString().toUpperCase());
-		}));
-
-		s.asyncRun();
-
-		var c = new net.Socket();
-		c.connect('127.0.0.1', 9876);
-		var r = new io.BufferedStream(c);
-
-		r.writePacket(new Buffer('abcdefg'));
-		var b = r.readPacket();
-		assert.equal(b.toString(), 'ABCDEFG');
-
-		r.writePacket(new Buffer('abcdefg'));
-		var b = r.readPacket();
-		assert.equal(b.toString(), 'ABCDEFG');
 	});
 });
 

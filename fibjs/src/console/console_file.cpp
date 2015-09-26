@@ -93,7 +93,7 @@ result_t file_logger::config(v8::Local<v8::Object> o)
 
 void file_logger::clearFile()
 {
-    exlib::AsyncEvent ac;
+    AsyncEvent ac;
     obj_ptr<List_base> fd;
     result_t hr;
 
@@ -140,7 +140,7 @@ void file_logger::clearFile()
         }
     }
 
-    if ((int)files.size() > m_count - 1)
+    if ((int32_t)files.size() > m_count - 1)
     {
         std::sort(files.begin(), files.end());
 
@@ -163,7 +163,6 @@ result_t file_logger::initFile()
     }
 
     result_t hr;
-    exlib::AsyncEvent ac;
 
     if (!m_file)
     {
@@ -186,7 +185,7 @@ result_t file_logger::initFile()
                 clearFile();
         }
 
-        hr = f->open(name.c_str(), "a+", &ac);
+        hr = f->open(name.c_str(), "a+");
         if (hr < 0)
             return hr;
 
@@ -200,12 +199,11 @@ result_t file_logger::initFile()
     return 0;
 }
 
-void file_logger::write(item *pn)
+result_t file_logger::write(AsyncEvent *ac)
 {
     item *p1;
-    exlib::AsyncEvent ac;
 
-    while (pn)
+    while (!m_workinglogs.empty())
     {
         std::string outBuffer;
         result_t hr;
@@ -213,24 +211,20 @@ void file_logger::write(item *pn)
         hr = initFile();
         if (hr < 0)
         {
-            while (pn)
-            {
-                p1 = pn;
-                pn = (logger::item *) p1->m_next;
+            while ((p1 = m_workinglogs.getHead()) != 0)
                 delete p1;
-            }
 
             break;
         }
 
-        while (pn)
+        while ((p1 = m_workinglogs.getHead()) != 0)
         {
-            p1 = pn;
+            if (p1->m_priority != console_base::_PRINT)
+            {
+                outBuffer.append(p1->full());
+                outBuffer.append("\n", 1);
+            }
 
-            outBuffer.append(p1->full());
-            outBuffer.append("\n", 1);
-
-            pn = (logger::item *) p1->m_next;
             delete p1;
 
             if (outBuffer.length() > STREAM_BUFF_SIZE)
@@ -242,9 +236,7 @@ void file_logger::write(item *pn)
 
         if (m_file)
         {
-            obj_ptr<Buffer_base> buf = new Buffer(outBuffer);
-
-            hr = m_file->write(buf, &ac);
+            hr = m_file->Write(outBuffer.c_str(), (int32_t)outBuffer.length());
             if (hr < 0)
                 m_file.Release();
 
@@ -254,7 +246,7 @@ void file_logger::write(item *pn)
         }
     }
 
-    Sleep(20);
+    return 0;
 }
 
 }

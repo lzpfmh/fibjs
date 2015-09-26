@@ -75,7 +75,7 @@ Variant &Variant::operator=(v8::Local<v8::Value> v)
             if (isPersistent())
             {
                 new (((v8::Persistent<v8::Value> *) m_Val.jsVal)) v8::Persistent<v8::Value>();
-                jsValEx().Reset(Isolate::now().isolate, v);
+                jsValEx().Reset(Isolate::now()->m_isolate, v);
             }
             else
                 new (((v8::Local<v8::Value> *) m_Val.jsVal)) v8::Local<v8::Value>(v);
@@ -89,24 +89,24 @@ Variant &Variant::operator=(v8::Local<v8::Value> v)
 
 Variant::operator v8::Local<v8::Value>() const
 {
-    Isolate & isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     switch (type())
     {
     case VT_Undefined:
-        return v8::Undefined(isolate.isolate);
+        return v8::Undefined(isolate->m_isolate);
     case VT_Null:
     case VT_Type:
     case VT_Persistent:
-        return v8::Null(isolate.isolate);
+        return v8::Null(isolate->m_isolate);
     case VT_Boolean:
-        return m_Val.boolVal ? v8::True(isolate.isolate) : v8::False(isolate.isolate);
+        return m_Val.boolVal ? v8::True(isolate->m_isolate) : v8::False(isolate->m_isolate);
     case VT_Integer:
-        return v8::Int32::New(isolate.isolate, m_Val.intVal);
+        return v8::Int32::New(isolate->m_isolate, m_Val.intVal);
     case VT_Long:
-        return v8::Number::New(isolate.isolate, (double) m_Val.longVal);
+        return v8::Number::New(isolate->m_isolate, (double) m_Val.longVal);
     case VT_Number:
-        return v8::Number::New(isolate.isolate, m_Val.dblVal);
+        return v8::Number::New(isolate->m_isolate, m_Val.dblVal);
     case VT_Date:
         return dateVal();
     case VT_Object:
@@ -120,29 +120,29 @@ Variant::operator v8::Local<v8::Value>() const
     }
     case VT_JSValue:
         if (isPersistent())
-            return v8::Local<v8::Value>::New(isolate.isolate, jsValEx());
+            return v8::Local<v8::Value>::New(isolate->m_isolate, jsValEx());
         else
             return jsVal();
     case VT_String:
     {
         std::string &str = strVal();
-        return v8::String::NewFromUtf8(isolate.isolate, str.c_str(),
+        return v8::String::NewFromUtf8(isolate->m_isolate, str.c_str(),
                                        v8::String::kNormalString,
-                                       (int) str.length());
+                                       (int32_t) str.length());
     }
     }
 
-    return v8::Null(isolate.isolate);
+    return v8::Null(isolate->m_isolate);
 }
 
-inline void next(int &len, int &pos)
+inline void next(int32_t &len, int32_t &pos)
 {
     pos++;
     if (len > 0)
         len--;
 }
 
-inline int64_t getInt(const char *s, int &len, int &pos)
+inline int64_t getInt(const char *s, int32_t &len, int32_t &pos)
 {
     char ch;
     int64_t n = 0;
@@ -156,17 +156,17 @@ inline int64_t getInt(const char *s, int &len, int &pos)
     return n;
 }
 
-inline char pick(const char *s, int &len, int &pos)
+inline char pick(const char *s, int32_t &len, int32_t &pos)
 {
     return len == 0 ? 0 : s[pos];
 }
 
-void Variant::parseNumber(const char *str, int len)
+void Variant::parseNumber(const char *str, int32_t len)
 {
     int64_t digit, frac = 0, exp = 0;
     double v, div = 1.0;
     bool bNeg, bExpNeg;
-    int pos = 0;
+    int32_t pos = 0;
     char ch;
 
     bNeg = (pick(str, len, pos) == '-');
@@ -214,7 +214,7 @@ void Variant::parseNumber(const char *str, int len)
             v = -v;
 
         if (exp != 0)
-            v *= pow((double) 10, (int) exp);
+            v *= pow((double) 10, (int32_t) exp);
 
         set_type(VT_Number);
         m_Val.dblVal = v;

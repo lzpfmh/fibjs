@@ -11,7 +11,7 @@
 namespace fibjs
 {
 
-result_t db_base::open(const char *connString, obj_ptr<object_base> &retVal, exlib::AsyncEvent *ac)
+result_t db_base::open(const char *connString, obj_ptr<object_base> &retVal, AsyncEvent *ac)
 {
     if (!qstrcmp(connString, "mysql:", 6))
         return openMySQL(connString, (obj_ptr<MySQL_base> &)retVal, ac);
@@ -31,9 +31,9 @@ result_t db_base::open(const char *connString, obj_ptr<object_base> &retVal, exl
     return CHECK_ERROR(CALL_E_INVALIDARG);
 }
 
-inline void _escape(const char *str, int sz, bool mysql, std::string &retVal)
+inline void _escape(const char *str, int32_t sz, bool mysql, std::string &retVal)
 {
-    int len, l;
+    int32_t len, l;
     const char *src;
     char *bstr;
     char ch;
@@ -143,7 +143,7 @@ result_t _format(const char *sql, const v8::FunctionCallbackInfo<v8::Value> &arg
 {
     std::string str;
     const char *p, *p1;
-    int cnt = 1;
+    int32_t cnt = 1;
 
     while (*sql)
     {
@@ -178,8 +178,8 @@ result_t _format(const char *sql, const v8::FunctionCallbackInfo<v8::Value> &arg
                 else if (v->IsArray())
                 {
                     v8::Local<v8::Array> a = v8::Local<v8::Array>::Cast(v);
-                    int len = a->Length();
-                    int i;
+                    int32_t len = a->Length();
+                    int32_t i;
 
                     str += '(';
 
@@ -224,7 +224,7 @@ result_t db_base::formatMySQL(const char *sql, const v8::FunctionCallbackInfo<v8
 
 result_t db_base::escape(const char *str, bool mysql, std::string &retVal)
 {
-    _escape(str, (int) qstrlen(str), mysql, retVal);
+    _escape(str, (int32_t) qstrlen(str), mysql, retVal);
     return 0;
 }
 

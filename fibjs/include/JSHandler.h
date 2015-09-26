@@ -28,7 +28,7 @@ public:
 public:
     // Handler_base
     virtual result_t invoke(object_base *v, obj_ptr<Handler_base> &retVal,
-                            exlib::AsyncEvent *ac);
+                            AsyncEvent *ac);
 
 public:
     static result_t New(v8::Local<v8::Value> hdlr,
@@ -44,7 +44,7 @@ public:
             return 0;
 
         obj_ptr<JSHandler> r = new JSHandler();
-        r->wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now().isolate, "handler"), hdlr);
+        r->wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now()->m_isolate, "handler"), hdlr);
 
         retVal = r;
         return 0;
@@ -52,7 +52,7 @@ public:
 
 public:
     static result_t js_invoke(Handler_base *hdlr, object_base *v,
-                              obj_ptr<Handler_base> &retVal, exlib::AsyncEvent *ac);
+                              obj_ptr<Handler_base> &retVal, AsyncEvent *ac);
 };
 
 } /* namespace fibjs */

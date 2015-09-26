@@ -15,11 +15,12 @@
 namespace fibjs
 {
 
-class FiberBase: public Fiber_base, asyncEvent
+class FiberBase: public Fiber_base,
+    public AsyncEvent
 {
     FIBER_FREE();
 
-public:
+protected:
     FiberBase()
     {
         m_rt.m_pDateCache = &g_dc;
@@ -29,29 +30,17 @@ public:
     {
     }
 
-    result_t join()
-    {
-        if (!m_quit.isSet())
-        {
-            v8::Unlocker unlocker(Isolate::now().isolate);
-            m_quit.wait();
-        }
-
-        return 0;
-    }
-
-    result_t get_caller(obj_ptr<Fiber_base> &retVal)
-    {
-        if (m_caller == NULL)
-            return CALL_RETURN_NULL;
-
-        retVal = m_caller;
-        return 0;
-    }
+public:
+    // Fiber_base
+    virtual result_t join();
+    virtual result_t get_traceInfo(std::string& retVal);
+    virtual result_t get_caller(obj_ptr<Fiber_base> &retVal);
 
 public:
     static void *fiber_proc(void *p);
     void start();
+
+    void set_caller(Fiber_base* caller);
 
     Runtime &runtime()
     {
@@ -59,10 +48,11 @@ public:
     }
 
 public:
+    std::string m_traceInfo;
     exlib::Event m_quit;
     Runtime m_rt;
     static DateCache g_dc;
-    obj_ptr<Fiber_base> m_caller;
+    weak_ptr<Fiber_base> m_caller;
 };
 
 class JSFiber: public FiberBase
@@ -84,42 +74,36 @@ public:
 
     private:
         obj_ptr<JSFiber> m_pFiber;
-        void *m_pNext;
-        v8::TryCatch try_catch;
+        TryCatch try_catch;
     };
 
 public:
-    JSFiber() :
-        m_error(false)
-    {
-    }
-
     ~JSFiber()
     {
         clear();
     }
 
     static JSFiber *current();
-    virtual void js_callback();
+    virtual void js_invoke();
 
     template<typename T>
-    void New(v8::Local<v8::Function> func, T &args, int nArgStart,
-             int nArgCount)
+    void New(v8::Local<v8::Function> func, T &args, int32_t nArgStart,
+             int32_t nArgCount)
     {
-        Isolate &isolate = Isolate::now();
-        int i;
+        Isolate* isolate = Isolate::now();
+        int32_t i;
 
         m_argv.resize(nArgCount - nArgStart);
         for (i = nArgStart; i < nArgCount; i++)
-            m_argv[i - nArgStart].Reset(isolate.isolate, args[i]);
-        m_func.Reset(isolate.isolate, func);
+            m_argv[i - nArgStart].Reset(isolate->m_isolate, args[i]);
+        m_func.Reset(isolate->m_isolate, func);
 
         start();
     }
 
     template<typename T>
     static result_t New(v8::Local<v8::Function> func,
-                        const v8::FunctionCallbackInfo<v8::Value> &args, int nArgStart,
+                        const v8::FunctionCallbackInfo<v8::Value> &args, int32_t nArgStart,
                         obj_ptr<T> &retVal)
     {
         obj_ptr<JSFiber> fb = new JSFiber();
@@ -131,7 +115,7 @@ public:
 
     template<typename T>
     static result_t New(v8::Local<v8::Function> func,
-                        v8::Local<v8::Value> *args, int argCount, obj_ptr<T> &retVal)
+                        v8::Local<v8::Value> *args, int32_t argCount, obj_ptr<T> &retVal)
     {
         obj_ptr<JSFiber> fb = new JSFiber();
         fb->New(func, args, 0, argCount);
@@ -140,27 +124,13 @@ public:
         return 0;
     }
 
-    static void call(v8::Local<v8::Function> func, v8::Local<v8::Value> *args,
-                     int argCount, v8::Local<v8::Value> &retVal)
-    {
-        JSFiber *fb = (JSFiber *) current();
-
-        if (fb)
-            fb->callFunction1(func, args, argCount, retVal);
-    }
-
     result_t get_result(v8::Local<v8::Value> &retVal)
     {
         if (m_result.IsEmpty())
             return CALL_RETURN_NULL;
 
-        retVal = v8::Local<v8::Value>::New(Isolate::now().isolate, m_result);
+        retVal = v8::Local<v8::Value>::New(Isolate::now()->m_isolate, m_result);
         return 0;
-    }
-
-    bool isError()
-    {
-        return m_error;
     }
 
     void clear()
@@ -176,16 +146,9 @@ public:
     }
 
 private:
-    void callFunction(v8::Local<v8::Value> &retVal);
-    void callFunction1(v8::Local<v8::Function> func,
-                       v8::Local<v8::Value> *args, int argCount,
-                       v8::Local<v8::Value> &retVal);
-
-private:
     v8::Persistent<v8::Function> m_func;
     QuickArray<v8::Persistent<v8::Value> > m_argv;
     v8::Persistent<v8::Value> m_result;
-    bool m_error;
 };
 
 } /* namespace fibjs */

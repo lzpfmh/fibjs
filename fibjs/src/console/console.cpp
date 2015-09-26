@@ -50,7 +50,7 @@ inline int64_t Ticks()
 namespace fibjs
 {
 
-extern std_logger s_std;
+extern std_logger* s_std;
 
 void _log(int32_t type, const char *fmt, const v8::FunctionCallbackInfo<v8::Value> &args)
 {
@@ -204,7 +204,7 @@ result_t console_base::trace(const char *label)
 
     strBuffer.append("console.trace: ", 15);
     strBuffer.append(label);
-    strBuffer.append(traceInfo());
+    strBuffer.append(traceInfo(10));
 
     asyncLog(_WARN, strBuffer);
     return 0;
@@ -217,12 +217,7 @@ result_t console_base::_assert(v8::Local<v8::Value> value, const char *msg)
 
 result_t console_base::print(const char *fmt, const v8::FunctionCallbackInfo<v8::Value> &args)
 {
-    flushLog();
-
-    std::string str;
-    util_base::format(fmt, args, str);
-    s_std.out(str.c_str());
-
+    _log(_PRINT, fmt, args);
     return 0;
 }
 
@@ -237,7 +232,7 @@ char *read_line()
 
     if (fgets(text, 1024, stdin) != NULL)
     {
-        int textLen = (int)qstrlen(text);
+        int32_t textLen = (int32_t)qstrlen(text);
         if (textLen > 0 && text[textLen - 1] == '\n')
             text[textLen - 1] = '\0';     // getting rid of newline character
         return text;
@@ -247,21 +242,31 @@ char *read_line()
     return NULL;
 }
 
+#if !defined(__clang__)
+extern "C" void __real_free(void*);
+#endif
+
 result_t console_base::readLine(const char *msg, std::string &retVal,
-                                exlib::AsyncEvent *ac)
+                                AsyncEvent *ac)
 {
 #ifndef _WIN32
     static bool _init = false;
     static char *(*_readline)(const char *);
     static void (*_add_history)(char *);
+    static void (*_free)(void*);
 
     if (!_init)
     {
         _init = true;
 
-#ifdef MacOS
+#ifdef __clang__
         void *handle = dlopen("libreadline.dylib", RTLD_LAZY);
+
+        if (_free == 0)
+            _free = (void (*)(void*))dlsym(RTLD_NEXT, "free");
 #else
+        _free = __real_free;
+
         const char *readline_dylib_names[] =
         {
             "libreadline.so.6",
@@ -288,14 +293,24 @@ result_t console_base::readLine(const char *msg, std::string &retVal,
 
     if (!ac)
     {
-        flushLog();
+        flushLog(true);
         return CHECK_ERROR(CALL_E_NOSYNC);
     }
 
 #ifndef _WIN32
     if (_readline && _add_history)
     {
-        char *line = _readline(msg);
+        std::string strmsg = msg;
+        char *line;
+        int32_t lfpos = strmsg.find_last_of(0x0a);
+
+        if ( lfpos >= 0 )
+        {
+            puts (strmsg.substr(0, lfpos).c_str());
+            line = _readline( strmsg.substr(lfpos + 1).c_str() );
+        }
+        else
+            line = _readline( msg );
 
         if (!line)
             return CHECK_ERROR(LastError());
@@ -305,12 +320,12 @@ result_t console_base::readLine(const char *msg, std::string &retVal,
             _add_history(line);
             retVal = line;
         }
-        free(line);
+        _free(line);
     }
     else
 #endif
     {
-        s_std.out(msg);
+        s_std->out(msg);
         char *line = read_line();
 
         if (!line)

@@ -462,7 +462,7 @@ describe('crypto', function() {
 			cert.load(fs.readFile('cert_files/ca-bundle.crt'));
 			var s1 = cert.dump();
 
-			assert.deepEqual(s.slice(23), s1);
+			assert.deepEqual(s.slice(29), s1);
 		});
 
 		it("root ca", function() {
@@ -478,7 +478,36 @@ describe('crypto', function() {
 			cert.loadRootCerts();
 			var s1 = cert.dump();
 
-			assert.deepEqual(s, s1.slice(23));
+			assert.deepEqual(s, s1.slice(29));
+		});
+
+		it("load root ca times", function() {
+			function count(ca) {
+				var cnt = 1;
+				var ca1;
+
+				while (ca1 = ca.next) {
+					cnt++;
+					ca = ca1;
+				}
+
+				return cnt;
+			}
+
+			cert.clear();
+			assert.deepEqual(cert.dump(), []);
+
+			cert.loadRootCerts();
+			var cnt1 = count(cert);
+
+			cert.loadRootCerts();
+			assert.equal(cnt1, count(cert));
+
+			cert.clear();
+			assert.deepEqual(cert.dump(), []);
+
+			cert.loadRootCerts();
+			assert.equal(cnt1, count(cert));
 		});
 
 		it("unknown format", function() {

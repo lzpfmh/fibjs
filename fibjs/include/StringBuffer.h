@@ -26,7 +26,7 @@ public:
 public:
     std::string str()
     {
-        int i, p = 0;
+        int32_t i, p = 0;
         std::string s;
 
         if (m_size > 0)
@@ -36,13 +36,13 @@ public:
             else
             {
                 s.resize(m_size);
-                for (i = 0; i < (int) m_array.size(); i++)
+                for (i = 0; i < (int32_t) m_array.size(); i++)
                 {
                     std::string &s1 = m_array[i];
                     size_t len = s1.length();
 
                     memcpy(&s[p], s1.c_str(), len);
-                    p += (int) len;
+                    p += (int32_t) len;
                 }
             }
 
@@ -65,6 +65,27 @@ public:
             m_size += s.length();
             m_array.append(s);
         }
+    }
+
+    void append(const char* s, int32_t sz)
+    {
+        if (sz < 0)
+            sz = (int32_t)qstrlen(s);
+
+        if (sz > 0)
+        {
+            m_size += sz;
+            m_array.append(std::string(s, sz));
+        }
+    }
+
+    void append(char ch)
+    {
+        if (m_size == 0)
+            m_array.resize(1);
+
+        m_array[m_array.size() - 1] += ch;
+        m_size ++;
     }
 
 private:

@@ -11,35 +11,35 @@
 #include "Socket.h"
 #include "Url.h"
 #include "X509Cert.h"
-#include <mbedtls/polarssl/error.h>
+#include <mbedtls/mbedtls/error.h>
 
 namespace fibjs
 {
 
 _ssl g_ssl;
 
-result_t _ssl::setError(int ret)
+result_t _ssl::setError(int32_t ret)
 {
     char msg[128];
 
-    polarssl_strerror(ret, msg, sizeof(msg));
+    mbedtls_strerror(ret, msg, sizeof(msg));
     return CHECK_ERROR(Runtime::setError(msg));
 }
 
 result_t ssl_base::connect(const char *url, obj_ptr<Stream_base> &retVal,
-                           exlib::AsyncEvent *ac)
+                           AsyncEvent *ac)
 {
-    class asyncConnect: public asyncState
+    class asyncConnect: public AsyncState
     {
     public:
-        asyncConnect(const char *host, int32_t port, bool ipv6,
-                     obj_ptr<Stream_base> &retVal, exlib::AsyncEvent *ac) :
-            asyncState(ac), m_host(host), m_port(port), m_ipv6(ipv6), m_retVal(retVal)
+        asyncConnect(const std::string host, int32_t port, bool ipv6,
+                     obj_ptr<Stream_base> &retVal, AsyncEvent *ac) :
+            AsyncState(ac), m_host(host), m_port(port), m_ipv6(ipv6), m_retVal(retVal)
         {
             set(connect);
         }
 
-        static int connect(asyncState *pState, int n)
+        static int32_t connect(AsyncState *pState, int32_t n)
         {
             asyncConnect *pThis = (asyncConnect *) pState;
 
@@ -48,10 +48,10 @@ result_t ssl_base::connect(const char *url, obj_ptr<Stream_base> &retVal,
                                   net_base::_SOCK_STREAM);
 
             pThis->set(handshake);
-            return pThis->m_sock->connect(pThis->m_host, pThis->m_port, pThis);
+            return pThis->m_sock->connect(pThis->m_host.c_str(), pThis->m_port, pThis);
         }
 
-        static int handshake(asyncState *pState, int n)
+        static int32_t handshake(AsyncState *pState, int32_t n)
         {
             asyncConnect *pThis = (asyncConnect *) pState;
 
@@ -66,10 +66,10 @@ result_t ssl_base::connect(const char *url, obj_ptr<Stream_base> &retVal,
                     return hr;
             }
 
-            return pThis->m_ssl_sock->connect(pThis->m_sock, pThis->m_host, pThis->m_temp, pThis);
+            return pThis->m_ssl_sock->connect(pThis->m_sock, pThis->m_host.c_str(), pThis->m_temp, pThis);
         }
 
-        static int ok(asyncState *pState, int n)
+        static int32_t ok(AsyncState *pState, int32_t n)
         {
             asyncConnect *pThis = (asyncConnect *) pState;
 
@@ -78,13 +78,13 @@ result_t ssl_base::connect(const char *url, obj_ptr<Stream_base> &retVal,
         }
 
     private:
-        const char *m_host;
+        const std::string m_host;
         int32_t m_port;
         bool m_ipv6;
         obj_ptr<Stream_base> &m_retVal;
         obj_ptr<Socket> m_sock;
         obj_ptr<SslSocket> m_ssl_sock;
-        int m_temp;
+        int32_t m_temp;
     };
 
     if (qstrcmp(url, "ssl:", 4))
@@ -104,7 +104,7 @@ result_t ssl_base::connect(const char *url, obj_ptr<Stream_base> &retVal,
 
     int32_t nPort = atoi(u->m_port.c_str());
 
-    return (new asyncConnect(u->m_hostname.c_str(), nPort, u->m_ipv6,
+    return (new asyncConnect(u->m_hostname, nPort, u->m_ipv6,
                              retVal, ac))->post(0);
 }
 
@@ -154,5 +154,30 @@ result_t ssl_base::set_verification(int32_t newVal)
     g_ssl.m_authmode = newVal;
     return 0;
 }
+
+result_t ssl_base::get_min_version(int32_t& retVal)
+{
+    retVal = g_ssl.m_min_version;
+    return 0;
+}
+
+result_t ssl_base::set_min_version(int32_t newVal)
+{
+    g_ssl.m_min_version = newVal;
+    return 0;
+}
+
+result_t ssl_base::get_max_version(int32_t& retVal)
+{
+    retVal = g_ssl.m_max_version;
+    return 0;
+}
+
+result_t ssl_base::set_max_version(int32_t newVal)
+{
+    g_ssl.m_max_version = newVal;
+    return 0;
+}
+
 
 }

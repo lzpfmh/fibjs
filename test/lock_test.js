@@ -16,13 +16,13 @@ describe('lock', function() {
 		function f() {
 			l.acquire();
 			v = 200;
-			coroutine.sleep();
+			coroutine.sleep(1);
 			v = 300;
 			l.release();
 		}
 
 		coroutine.start(f);
-		coroutine.sleep();
+		coroutine.sleep(1);
 		l.acquire();
 		assert.equal(300, v);
 		l.release();
@@ -35,26 +35,29 @@ describe('lock', function() {
 		assert.equal(false, sem.trywait());
 
 		var v = 100;
+		var run = true;
 
 		function f1() {
-			while (1) {
+			while (run) {
 				sem.wait();
 				v++;
 			}
 		}
 
 		coroutine.start(f1);
-		coroutine.sleep();
+		coroutine.sleep(1);
 		assert.equal(100, v);
 
 		sem.post();
-		coroutine.sleep();
+		coroutine.sleep(1);
 		assert.equal(101, v);
 
 		for (var i = 0; i < 10; i++)
 			sem.post();
-		coroutine.sleep();
+		coroutine.sleep(1);
 		assert.equal(111, v);
+		run = false;
+		sem.post();
 	});
 
 	it("Condition", function() {
@@ -77,17 +80,17 @@ describe('lock', function() {
 		coroutine.start(f3);
 
 		cond.acquire();
-		coroutine.sleep();
+		coroutine.sleep(1);
 		cond.notify();
-		coroutine.sleep();
+		coroutine.sleep(1);
 		assert.equal(0, v);
 
 		cond.acquire();
 		v = 100;
 		cond.notify();
-		coroutine.sleep();
+		coroutine.sleep(1);
 		assert.equal(200, v);
 	});
 });
 
-//test.run();
+//test.run(console.DEBUG);

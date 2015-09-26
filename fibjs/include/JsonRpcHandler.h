@@ -27,13 +27,13 @@ public:
 public:
     JsonRpcHandler(Handler_base *hdlr)
     {
-        wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now().isolate, "handler"), hdlr->wrap());
+        wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now()->m_isolate, "handler"), hdlr->wrap());
         m_handler = hdlr;
     }
 
 public:
     // Handler_base
-    virtual result_t invoke(object_base *v, obj_ptr<Handler_base> &retVal, exlib::AsyncEvent *ac);
+    virtual result_t invoke(object_base *v, obj_ptr<Handler_base> &retVal, AsyncEvent *ac);
 
 private:
     naked_ptr<Handler_base> m_handler;

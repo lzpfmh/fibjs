@@ -33,6 +33,8 @@ public:
     result_t get_headers(obj_ptr<HttpCollection_base> &retVal);
     result_t get_keepAlive(bool &retVal);
     result_t set_keepAlive(bool newVal);
+    result_t get_upgrade(bool& retVal);
+    result_t set_upgrade(bool newVal);
     result_t get_maxHeadersCount(int32_t &retVal);
     result_t set_maxHeadersCount(int32_t newVal);
     result_t get_maxUploadSize(int32_t &retVal);
@@ -40,9 +42,9 @@ public:
     result_t hasHeader(const char *name, bool &retVal);
     result_t firstHeader(const char *name, Variant &retVal);
     result_t allHeader(const char *name, obj_ptr<List_base> &retVal);
-    result_t addHeader(v8::Local<v8::Object> map);
+    result_t addHeader(Map_base* map);
     result_t addHeader(const char *name, Variant value);
-    result_t setHeader(v8::Local<v8::Object> map);
+    result_t setHeader(Map_base* map);
     result_t setHeader(const char *name, Variant value);
     result_t removeHeader(const char *name);
     result_t get_stream(obj_ptr<Stream_base> &retVal);
@@ -51,14 +53,14 @@ public:
 
 public:
     result_t sendTo(Stream_base *stm, std::string &strCommand,
-                    exlib::AsyncEvent *ac);
+                    AsyncEvent *ac);
     result_t sendHeader(Stream_base *stm, std::string &strCommand,
-                        exlib::AsyncEvent *ac);
-    result_t readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac);
+                        AsyncEvent *ac);
+    result_t readFrom(BufferedStream_base *stm, AsyncEvent *ac);
 
 public:
-    void addHeader(const char *name, int szName, const char *value,
-                   int szValue);
+    void addHeader(const char *name, int32_t szName, const char *value,
+                   int32_t szValue);
     result_t addHeader(std::string &strLine);
     size_t size();
     size_t getData(char *buf, size_t sz);
@@ -68,6 +70,7 @@ public:
     bool m_bResponse;
     std::string m_protocol;
     bool m_keepAlive;
+    bool m_upgrade;
     int32_t m_maxHeadersCount;
     int32_t m_maxUploadSize;
     std::string m_origin;

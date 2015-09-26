@@ -31,7 +31,7 @@ public:
         unsigned char out[CHUNK];
         std::string strBuf;
         std::stringstream outBuf;
-        int err;
+        int32_t err;
 
         err = init();
         if (err != Z_OK)
@@ -39,7 +39,7 @@ public:
 
         data->toString(strBuf);
 
-        strm.avail_in = (int) strBuf.length();
+        strm.avail_in = (int32_t) strBuf.length();
         strm.next_in = (unsigned char *) strBuf.c_str();
 
         do
@@ -65,22 +65,22 @@ public:
         return 0;
     }
 
-    result_t process(Buffer_base *data, Stream_base *stm, exlib::AsyncEvent *ac)
+    result_t process(Buffer_base *data, Stream_base *stm, AsyncEvent *ac)
     {
-        class asyncProcess: public asyncState
+        class asyncProcess: public AsyncState
         {
         public:
             asyncProcess(zlibWorker *pThis, Stream_base *stm,
-                         exlib::AsyncEvent *ac) :
-                asyncState(ac), m_pThis(pThis), m_stm(stm)
+                         AsyncEvent *ac) :
+                AsyncState(ac), m_pThis(pThis), m_stm(stm)
             {
                 set(process);
             }
 
-            static int process(asyncState *pState, int n)
+            static int32_t process(AsyncState *pState, int32_t n)
             {
                 asyncProcess *pThis = (asyncProcess *) pState;
-                int err;
+                int32_t err;
 
                 if (pThis->m_pThis->strm.avail_out != 0
                         && pThis->m_pThis->fin())
@@ -103,7 +103,7 @@ public:
                 return pThis->m_stm->write(pThis->m_buffer, pThis);
             }
 
-            virtual int error(int v)
+            virtual int32_t error(int32_t v)
             {
                 m_pThis->end();
                 return v;
@@ -116,7 +116,7 @@ public:
             obj_ptr<Buffer_base> m_buffer;
         };
 
-        int err;
+        int32_t err;
 
         err = init();
         if (err != Z_OK)
@@ -126,26 +126,26 @@ public:
 
         data->toString(strBuf);
 
-        strm.avail_in = (int) strBuf.length();
+        strm.avail_in = (int32_t) strBuf.length();
         strm.next_in = (unsigned char *) strBuf.c_str();
         strm.avail_out = 0;
 
         return (new asyncProcess(this, stm, ac))->post(0);
     }
 
-    result_t process(Stream_base *src, Stream_base *stm, exlib::AsyncEvent *ac)
+    result_t process(Stream_base *src, Stream_base *stm, AsyncEvent *ac)
     {
-        class asyncProcess: public asyncState
+        class asyncProcess: public AsyncState
         {
         public:
             asyncProcess(zlibWorker *pThis, Stream_base *src, Stream_base *stm,
-                         exlib::AsyncEvent *ac) :
-                asyncState(ac), m_pThis(pThis), m_src(src), m_stm(stm)
+                         AsyncEvent *ac) :
+                AsyncState(ac), m_pThis(pThis), m_src(src), m_stm(stm)
             {
                 set(read);
             }
 
-            static int read(asyncState *pState, int n)
+            static int32_t read(AsyncState *pState, int32_t n)
             {
                 asyncProcess *pThis = (asyncProcess *) pState;
 
@@ -153,7 +153,7 @@ public:
                 return pThis->m_src->read(-1, pThis->m_buffer, pThis);
             }
 
-            static int read_ok(asyncState *pState, int n)
+            static int32_t read_ok(AsyncState *pState, int32_t n)
             {
                 asyncProcess *pThis = (asyncProcess *) pState;
 
@@ -161,7 +161,7 @@ public:
                 {
                     pThis->m_buffer->toString(pThis->m_strBuf);
                     pThis->m_pThis->strm.avail_in =
-                        (int) pThis->m_strBuf.length();
+                        (int32_t) pThis->m_strBuf.length();
                     pThis->m_pThis->strm.next_in =
                         (unsigned char *) pThis->m_strBuf.c_str();
                     pThis->m_pThis->strm.avail_out = 0;
@@ -176,10 +176,10 @@ public:
                 return 0;
             }
 
-            static int process(asyncState *pState, int n)
+            static int32_t process(AsyncState *pState, int32_t n)
             {
                 asyncProcess *pThis = (asyncProcess *) pState;
-                int err;
+                int32_t err;
 
                 pThis->m_pThis->strm.avail_out = CHUNK;
                 pThis->m_pThis->strm.next_out = pThis->out;
@@ -196,7 +196,7 @@ public:
                 return pThis->m_stm->write(pThis->m_buffer, pThis);
             }
 
-            static int write_ok(asyncState *pState, int n)
+            static int32_t write_ok(AsyncState *pState, int32_t n)
             {
                 asyncProcess *pThis = (asyncProcess *) pState;
 
@@ -210,7 +210,7 @@ public:
                 return 0;
             }
 
-            static int end(asyncState *pState, int n)
+            static int32_t end(AsyncState *pState, int32_t n)
             {
                 asyncProcess *pThis = (asyncProcess *) pState;
 
@@ -218,7 +218,7 @@ public:
                 return pThis->done();
             }
 
-            virtual int error(int v)
+            virtual int32_t error(int32_t v)
             {
                 m_pThis->end();
                 return v;
@@ -233,7 +233,7 @@ public:
             std::string m_strBuf;
         };
 
-        int err;
+        int32_t err;
 
         err = init();
         if (err != Z_OK)
@@ -243,12 +243,12 @@ public:
     }
 
 public:
-    virtual int init()
+    virtual int32_t init()
     {
         return Z_OK;
     }
 
-    virtual int put()
+    virtual int32_t put()
     {
         return Z_OK;
     }
@@ -269,18 +269,18 @@ protected:
 class def: public zlibWorker
 {
 public:
-    def(int level = -1) :
+    def(int32_t level = -1) :
         m_level(level), flush(Z_NO_FLUSH)
     {
     }
 
 public:
-    virtual int init()
+    virtual int32_t init()
     {
         return deflateInit(&strm, m_level);
     }
 
-    virtual int put()
+    virtual int32_t put()
     {
         ::deflate(&strm, flush);
         return Z_OK;
@@ -301,25 +301,29 @@ public:
     }
 
 private:
-    int m_level;
-    int flush;
+    int32_t m_level;
+    int32_t flush;
 };
 
 class inf: public zlibWorker
 {
 public:
-    virtual int init()
+    virtual int32_t init()
     {
         return inflateInit(&strm);
     }
 
-    virtual int put()
+    virtual int32_t put()
     {
-        int ret = ::inflate(&strm, Z_NO_FLUSH);
+        int32_t ret = ::inflate(&strm, Z_NO_FLUSH);
         if (ret == Z_STREAM_END)
         {
             inflateReset(&strm);
             return Z_OK;
+        }
+        if (ret == Z_DATA_ERROR)
+        {
+            ret = inflateSync(&strm);
         }
         return ret;
     }
@@ -333,7 +337,7 @@ public:
 class gunz: public inf
 {
 public:
-    virtual int init()
+    virtual int32_t init()
     {
         return inflateInit2(&strm, 15 + 16);
     }
@@ -342,23 +346,41 @@ public:
 class gz: public def
 {
 public:
-    virtual int init()
+    virtual int32_t init()
     {
         return deflateInit2(&strm, -1, 8, 15 + 16, 8, 0);
     }
 };
 
-result_t zlib_base::deflate(Buffer_base *data, int32_t level,
-                            obj_ptr<Buffer_base> &retVal, exlib::AsyncEvent *ac)
+class infraw: public inf
 {
-    if (switchToAsync(ac))
+public:
+    virtual int32_t init()
+    {
+        return inflateInit2(&strm, -15);
+    }
+};
+
+class defraw: public def
+{
+public:
+    virtual int32_t init()
+    {
+        return deflateInit2(&strm, -1, Z_DEFLATED, -15, 8, 0);
+    }
+};
+
+result_t zlib_base::deflate(Buffer_base *data, int32_t level,
+                            obj_ptr<Buffer_base> &retVal, AsyncEvent *ac)
+{
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     return def(level).process(data, retVal);
 }
 
 result_t zlib_base::deflateTo(Buffer_base *data, Stream_base *stm,
-                              int32_t level, exlib::AsyncEvent *ac)
+                              int32_t level, AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -367,7 +389,7 @@ result_t zlib_base::deflateTo(Buffer_base *data, Stream_base *stm,
 }
 
 result_t zlib_base::deflateTo(Stream_base *src, Stream_base *stm, int32_t level,
-                              exlib::AsyncEvent *ac)
+                              AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -376,16 +398,16 @@ result_t zlib_base::deflateTo(Stream_base *src, Stream_base *stm, int32_t level,
 }
 
 result_t zlib_base::inflate(Buffer_base *data, obj_ptr<Buffer_base> &retVal,
-                            exlib::AsyncEvent *ac)
+                            AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     return inf().process(data, retVal);
 }
 
 result_t zlib_base::inflateTo(Buffer_base *data, Stream_base *stm,
-                              exlib::AsyncEvent *ac)
+                              AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -394,7 +416,7 @@ result_t zlib_base::inflateTo(Buffer_base *data, Stream_base *stm,
 }
 
 result_t zlib_base::inflateTo(Stream_base *src, Stream_base *stm,
-                              exlib::AsyncEvent *ac)
+                              AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -403,16 +425,16 @@ result_t zlib_base::inflateTo(Stream_base *src, Stream_base *stm,
 }
 
 result_t zlib_base::gzip(Buffer_base *data, obj_ptr<Buffer_base> &retVal,
-                         exlib::AsyncEvent *ac)
+                         AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     return gz().process(data, retVal);
 }
 
 result_t zlib_base::gzipTo(Buffer_base *data, Stream_base *stm,
-                           exlib::AsyncEvent *ac)
+                           AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -421,7 +443,7 @@ result_t zlib_base::gzipTo(Buffer_base *data, Stream_base *stm,
 }
 
 result_t zlib_base::gzipTo(Stream_base *src, Stream_base *stm,
-                           exlib::AsyncEvent *ac)
+                           AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -430,16 +452,16 @@ result_t zlib_base::gzipTo(Stream_base *src, Stream_base *stm,
 }
 
 result_t zlib_base::gunzip(Buffer_base *data, obj_ptr<Buffer_base> &retVal,
-                           exlib::AsyncEvent *ac)
+                           AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     return gunz().process(data, retVal);
 }
 
 result_t zlib_base::gunzipTo(Buffer_base *data, Stream_base *stm,
-                             exlib::AsyncEvent *ac)
+                             AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -448,12 +470,66 @@ result_t zlib_base::gunzipTo(Buffer_base *data, Stream_base *stm,
 }
 
 result_t zlib_base::gunzipTo(Stream_base *src, Stream_base *stm,
-                             exlib::AsyncEvent *ac)
+                             AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     return gunz().process(src, stm, ac);
+}
+
+result_t zlib_base::deflateRaw(Buffer_base *data, int32_t level,
+                               obj_ptr<Buffer_base> &retVal, AsyncEvent *ac)
+{
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
+    return defraw().process(data, retVal);
+}
+
+result_t zlib_base::deflateRawTo(Buffer_base *data, Stream_base *stm,
+                                 int32_t level, AsyncEvent *ac)
+{
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
+    return defraw().process(data, stm, ac);
+}
+
+result_t zlib_base::deflateRawTo(Stream_base *src, Stream_base *stm, int32_t level,
+                                 AsyncEvent *ac)
+{
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
+    return defraw().process(src, stm, ac);
+}
+
+result_t zlib_base::inflateRaw(Buffer_base *data, obj_ptr<Buffer_base> &retVal,
+                               AsyncEvent *ac)
+{
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
+    return infraw().process(data, retVal);
+}
+
+result_t zlib_base::inflateRawTo(Buffer_base *data, Stream_base *stm,
+                                 AsyncEvent *ac)
+{
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
+    return infraw().process(data, stm, ac);
+}
+
+result_t zlib_base::inflateRawTo(Stream_base *src, Stream_base *stm,
+                                 AsyncEvent *ac)
+{
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
+    return infraw().process(src, stm, ac);
 }
 
 }

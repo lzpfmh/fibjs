@@ -10,8 +10,8 @@
 #include "X509Req.h"
 #include "X509Cert.h"
 #include "PKey.h"
-#include <mbedtls/polarssl/pem.h>
-#include <mbedtls/polarssl/oid.h>
+#include <mbedtls/mbedtls/pem.h>
+#include <mbedtls/mbedtls/oid.h>
 #include "Buffer.h"
 #include "parse.h"
 
@@ -36,54 +36,54 @@ result_t X509Req_base::_new(const char *subject, PKey_base *key,
         return hr;
 
     retVal = req;
-
+    
     return 0;
 }
 
 X509Req::X509Req()
 {
-    x509_csr_init(&m_csr);
+    mbedtls_x509_csr_init(&m_csr);
 }
 
 X509Req::~X509Req()
 {
-    x509_csr_free(&m_csr);
+    mbedtls_x509_csr_free(&m_csr);
 }
 
 void X509Req::clear()
 {
-    x509_csr_free(&m_csr);
-    x509_csr_init(&m_csr);
+    mbedtls_x509_csr_free(&m_csr);
+    mbedtls_x509_csr_init(&m_csr);
 }
 
 result_t X509Req::create(const char *subject, PKey_base *key, int32_t hash)
 {
     clear();
 
-    x509write_csr csr;
-    int ret;
+    mbedtls_x509write_csr csr;
+    int32_t ret;
+    mbedtls_x509write_csr_init(&csr);
 
-    x509write_csr_init(&csr);
-
-    if (hash < POLARSSL_MD_MD2 || hash > POLARSSL_MD_RIPEMD160)
+    if (hash < MBEDTLS_MD_MD2 || hash > MBEDTLS_MD_RIPEMD160)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    x509write_csr_set_md_alg(&csr, (md_type_t)hash);
-    x509write_csr_set_subject_name(&csr, subject);
+    mbedtls_x509write_csr_set_md_alg(&csr, (mbedtls_md_type_t)hash);
+    mbedtls_x509write_csr_set_subject_name(&csr, subject);
 
-    pk_context *k = &((PKey *)(PKey_base *)key)->m_key;
-    x509write_csr_set_key(&csr, k);
+    mbedtls_pk_context *k = &((PKey *)(PKey_base *)key)->m_key;
+    mbedtls_x509write_csr_set_key(&csr, k);
 
     std::string buf;
-    buf.resize(pk_get_size(k) * 8 + 128);
+    buf.resize(mbedtls_pk_get_bitlen(k) * 8 + 128);
 
-    ret = x509write_csr_pem(&csr, (unsigned char *)&buf[0], buf.length(),
-                            ctr_drbg_random, &g_ssl.ctr_drbg);
-    x509write_csr_free(&csr);
+    ret = mbedtls_x509write_csr_pem(&csr, (unsigned char *)&buf[0], buf.length(),
+                                    mbedtls_ctr_drbg_random, &g_ssl.ctr_drbg);
+    mbedtls_x509write_csr_free(&csr);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
-    ret = x509_csr_parse(&m_csr, (const unsigned char *)buf.c_str(), qstrlen(buf.c_str()));
+    ret = mbedtls_x509_csr_parse(&m_csr, (const unsigned char *)buf.c_str(),
+                                 qstrlen(buf.c_str()) + 1);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -92,15 +92,15 @@ result_t X509Req::create(const char *subject, PKey_base *key, int32_t hash)
 
 result_t X509Req::load(Buffer_base *derReq)
 {
-    int ret;
+    int32_t ret;
 
     clear();
 
     std::string csr;
     derReq->toString(csr);
 
-    ret = x509_csr_parse(&m_csr, (const unsigned char *)csr.c_str(),
-                         csr.length());
+    ret = mbedtls_x509_csr_parse(&m_csr, (const unsigned char *)csr.c_str(),
+                                 csr.length());
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -109,12 +109,12 @@ result_t X509Req::load(Buffer_base *derReq)
 
 result_t X509Req::load(const char *pemReq)
 {
-    int ret;
+    int32_t ret;
 
     clear();
 
-    ret = x509_csr_parse(&m_csr, (const unsigned char *)pemReq,
-                         qstrlen(pemReq));
+    ret = mbedtls_x509_csr_parse(&m_csr, (const unsigned char *)pemReq,
+                                 qstrlen(pemReq) + 1);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -125,7 +125,7 @@ result_t X509Req::loadFile(const char *filename)
 {
     result_t hr;
     std::string data;
-    int ret;
+    int32_t ret;
 
     clear();
 
@@ -133,8 +133,8 @@ result_t X509Req::loadFile(const char *filename)
     if (hr < 0)
         return hr;
 
-    ret = x509_csr_parse(&m_csr, (const unsigned char *)data.c_str(),
-                         data.length());
+    ret = mbedtls_x509_csr_parse(&m_csr, (const unsigned char *)data.c_str(),
+                                 data.length() + 1);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -154,12 +154,12 @@ result_t X509Req::exportPem(std::string &retVal)
 
     std::string buf;
     size_t olen;
-    int ret;
+    int32_t ret;
 
     buf.resize(m_csr.raw.len * 2 + 64);
-    ret = pem_write_buffer(PEM_BEGIN_CSR, PEM_END_CSR,
-                           m_csr.raw.p, m_csr.raw.len,
-                           (unsigned char *)&buf[0], buf.length(), &olen);
+    ret = mbedtls_pem_write_buffer(PEM_BEGIN_CSR, PEM_END_CSR,
+                                   m_csr.raw.p, m_csr.raw.len,
+                                   (unsigned char *)&buf[0], buf.length(), &olen);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -186,7 +186,7 @@ result_t X509Req::toString(std::string &retVal)
 
 result_t X509Req::parseString(v8::Local<v8::Value> v, const X509Cert::_name *pNames)
 {
-    int num = 0;
+    int32_t num = 0;
 
     if (!IsEmpty(v))
     {
@@ -194,9 +194,9 @@ result_t X509Req::parseString(v8::Local<v8::Value> v, const X509Cert::_name *pNa
         const char *ptr = *str;
 
         if (!ptr)
-            return CHECK_ERROR(_ssl::setError(POLARSSL_ERR_MPI_BAD_INPUT_DATA));
+            return CHECK_ERROR(_ssl::setError(MBEDTLS_ERR_MPI_BAD_INPUT_DATA));
 
-        _parser p(ptr, (int)qstrlen(ptr));
+        _parser p(ptr, (int32_t)qstrlen(ptr));
 
         while (!p.end())
         {
@@ -233,7 +233,7 @@ result_t X509Req::parseString(v8::Local<v8::Value> v, const X509Cert::_name *pNa
 
 result_t X509Req::sign(const char *issuer, PKey_base *key,
                        v8::Local<v8::Object> opts, obj_ptr<X509Cert_base> &retVal,
-                       exlib::AsyncEvent *ac)
+                       AsyncEvent *ac)
 {
     result_t hr;
     bool priv;
@@ -245,20 +245,20 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
     if (!priv)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    int ret;
+    int32_t ret;
     std::string subject;
-    pk_context *pk;
+    mbedtls_pk_context *pk;
     int32_t hash;
     std::string buf;
     obj_ptr<X509Cert> cert;
 
     if (!ac)
     {
-        Isolate &isolate = Isolate::now();
-        mpi serial;
+        Isolate* isolate = Isolate::now();
+        mbedtls_mpi serial;
         v8::Local<v8::Value> v;
 
-        x509write_crt_init(&m_crt);
+        mbedtls_x509write_crt_init(&m_crt);
 
         hr = GetConfigValue(opts, "hash", hash);
         if (hr == CALL_E_PARAMNOTOPTIONAL)
@@ -266,15 +266,15 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
         else if (hr < 0)
             goto exit;
 
-        if (hash < POLARSSL_MD_MD2 || hash > POLARSSL_MD_RIPEMD160)
+        if (hash < MBEDTLS_MD_MD2 || hash > MBEDTLS_MD_RIPEMD160)
         {
             hr = CALL_E_INVALIDARG;
             goto exit;
         }
 
-        x509write_crt_set_md_alg(&m_crt, POLARSSL_MD_SHA1);
+        mbedtls_x509write_crt_set_md_alg(&m_crt, MBEDTLS_MD_SHA1);
 
-        v = opts->Get(v8::String::NewFromUtf8(isolate.isolate, "serial",
+        v = opts->Get(v8::String::NewFromUtf8(isolate->m_isolate, "serial",
                                               v8::String::kNormalString, 6));
         if (!IsEmpty(v))
         {
@@ -282,34 +282,34 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
 
             if (!*str)
             {
-                hr = CHECK_ERROR(_ssl::setError(POLARSSL_ERR_MPI_BAD_INPUT_DATA));
+                hr = CHECK_ERROR(_ssl::setError(MBEDTLS_ERR_MPI_BAD_INPUT_DATA));
                 goto exit;
             }
 
-            mpi_init(&serial);
-            ret = mpi_read_string(&serial, 10, *str);
+            mbedtls_mpi_init(&serial);
+            ret = mbedtls_mpi_read_string(&serial, 10, *str);
             if (ret != 0)
             {
-                mpi_free(&serial);
+                mbedtls_mpi_free(&serial);
                 hr = CHECK_ERROR(_ssl::setError(ret));
                 goto exit;
             }
         }
         else
         {
-            mpi_init(&serial);
-            mpi_lset(&serial, 1);
+            mbedtls_mpi_init(&serial);
+            mbedtls_mpi_lset(&serial, 1);
         }
 
-        ret = x509write_crt_set_serial(&m_crt, &serial);
+        ret = mbedtls_x509write_crt_set_serial(&m_crt, &serial);
         if (ret != 0)
         {
-            mpi_free(&serial);
+            mbedtls_mpi_free(&serial);
             hr = CHECK_ERROR(_ssl::setError(ret));
             goto exit;
         }
 
-        mpi_free(&serial);
+        mbedtls_mpi_free(&serial);
 
         date_t d1, d2;
         std::string s1, s2;
@@ -332,7 +332,7 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
             goto exit;
         d2.toX509String(s2);
 
-        ret = x509write_crt_set_validity(&m_crt, s1.c_str(), s2.c_str());
+        ret = mbedtls_x509write_crt_set_validity(&m_crt, s1.c_str(), s2.c_str());
         if (ret != 0)
         {
             hr = CHECK_ERROR(_ssl::setError(ret));
@@ -355,15 +355,15 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
             goto exit;
         }
 
-        ret = x509write_crt_set_basic_constraints(&m_crt, is_ca ? 1 : 0, pathlen);
+        ret = mbedtls_x509write_crt_set_basic_constraints(&m_crt, is_ca ? 1 : 0, pathlen);
         if (ret != 0)
         {
             hr = CHECK_ERROR(_ssl::setError(ret));
             goto exit;
         }
 
-        int key_usage = parseString(opts->Get(v8::String::NewFromUtf8(isolate.isolate, "usage",
-                                              v8::String::kNormalString, 5)), X509Cert::g_usages);
+        int32_t key_usage = parseString(opts->Get(v8::String::NewFromUtf8(isolate->m_isolate, "usage",
+                                        v8::String::kNormalString, 5)), X509Cert::g_usages);
         if (key_usage < 0)
         {
             hr = key_usage;
@@ -371,7 +371,7 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
         }
         else if (key_usage)
         {
-            ret = x509write_crt_set_key_usage(&m_crt, key_usage);
+            ret = mbedtls_x509write_crt_set_key_usage(&m_crt, key_usage);
             if (ret != 0)
             {
                 hr = CHECK_ERROR(_ssl::setError(ret));
@@ -379,8 +379,8 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
             }
         }
 
-        int cert_type = parseString(opts->Get(v8::String::NewFromUtf8(isolate.isolate, "type",
-                                              v8::String::kNormalString, 4)), X509Cert::g_types);
+        int32_t cert_type = parseString(opts->Get(v8::String::NewFromUtf8(isolate->m_isolate, "type",
+                                        v8::String::kNormalString, 4)), X509Cert::g_types);
         if (cert_type < 0)
         {
             hr = cert_type;
@@ -388,7 +388,7 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
         }
         else if (cert_type)
         {
-            ret = x509write_crt_set_ns_cert_type(&m_crt, cert_type);
+            ret = mbedtls_x509write_crt_set_ns_cert_type(&m_crt, cert_type);
             if (ret != 0)
             {
                 hr = CHECK_ERROR(_ssl::setError(ret));
@@ -401,45 +401,45 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
 
     pk = &((PKey *)key)->m_key;
 
-    x509write_crt_set_subject_key(&m_crt, &m_csr.pk);
-    x509write_crt_set_issuer_key(&m_crt, pk);
+    mbedtls_x509write_crt_set_subject_key(&m_crt, &m_csr.pk);
+    mbedtls_x509write_crt_set_issuer_key(&m_crt, pk);
 
     hr = X509Req::get_subject(subject);
     if (hr < 0)
         goto exit;
 
-    ret = x509write_crt_set_subject_name(&m_crt, subject.c_str());
+    ret = mbedtls_x509write_crt_set_subject_name(&m_crt, subject.c_str());
     if (ret != 0)
     {
         hr = CHECK_ERROR(_ssl::setError(ret));
         goto exit;
     }
 
-    ret = x509write_crt_set_issuer_name(&m_crt, issuer);
+    ret = mbedtls_x509write_crt_set_issuer_name(&m_crt, issuer);
     if (ret != 0)
     {
         hr = CHECK_ERROR(_ssl::setError(ret));
         goto exit;
     }
 
-    ret = x509write_crt_set_subject_key_identifier(&m_crt);
+    ret = mbedtls_x509write_crt_set_subject_key_identifier(&m_crt);
     if (ret != 0)
     {
         hr = CHECK_ERROR(_ssl::setError(ret));
         goto exit;
     }
 
-    ret = x509write_crt_set_authority_key_identifier(&m_crt);
+    ret = mbedtls_x509write_crt_set_authority_key_identifier(&m_crt);
     if (ret != 0)
     {
         hr = CHECK_ERROR(_ssl::setError(ret));
         goto exit;
     }
 
-    buf.resize(pk_get_size(pk) * 8 + 128);
+    buf.resize(mbedtls_pk_get_bitlen(pk) * 8 + 128);
 
-    ret = x509write_crt_pem(&m_crt, (unsigned char *)&buf[0], buf.length(),
-                            ctr_drbg_random, &g_ssl.ctr_drbg);
+    ret = mbedtls_x509write_crt_pem(&m_crt, (unsigned char *)&buf[0], buf.length(),
+                                    mbedtls_ctr_drbg_random, &g_ssl.ctr_drbg);
     if (ret < 0)
     {
         hr = CHECK_ERROR(_ssl::setError(ret));
@@ -454,19 +454,19 @@ result_t X509Req::sign(const char *issuer, PKey_base *key,
     retVal = cert;
 
 exit:
-    x509write_crt_free(&m_crt);
+    mbedtls_x509write_crt_free(&m_crt);
 
     return hr;
 }
 
 result_t X509Req::get_subject(std::string &retVal)
 {
-    int ret;
+    int32_t ret;
     std::string buf;
 
     buf.resize(1024);
 
-    ret = x509_dn_gets(&buf[0], buf.length(), &m_csr.subject);
+    ret = mbedtls_x509_dn_gets(&buf[0], buf.length(), &m_csr.subject);
     if (ret < 0)
         return CHECK_ERROR(_ssl::setError(ret));
 

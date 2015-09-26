@@ -27,7 +27,7 @@ static struct _cipher_size
 {
     const char *name;
     size_t size;
-    const cipher_info_t *cis[MODE_COUNT];
+    const mbedtls_cipher_info_t *cis[MODE_COUNT];
 } s_sizes[][SIZE_COUNT] =
 {
     {
@@ -75,9 +75,9 @@ public:
                         std::string name = s_sizes[i][j].name;
 
                         name.append(s_modes[k]);
-                        s_sizes[i][j].cis[k] = cipher_info_from_string(name.c_str());
+                        s_sizes[i][j].cis[k] = mbedtls_cipher_info_from_string(name.c_str());
                         if (s_sizes[i][j].cis[k])
-                            s_sizes[i][j].size = s_sizes[i][j].cis[k]->key_length;
+                            s_sizes[i][j].size = s_sizes[i][j].cis[k]->key_bitlen;
                     }
     }
 } s_cipher_init;
@@ -93,7 +93,7 @@ result_t Cipher_base::_new(int32_t provider, int32_t mode, Buffer_base *key,
         return CHECK_ERROR(Runtime::setError("Cipher: Invalid mode"));
 
     std::string strKey;
-    const cipher_info_t *info = NULL;
+    const mbedtls_cipher_info_t *info = NULL;
 
     key->toString(strKey);
     size_t keylen = strKey.length();
@@ -107,7 +107,7 @@ result_t Cipher_base::_new(int32_t provider, int32_t mode, Buffer_base *key,
         keylen = 24;
     }
 
-    for (int i = 0; i < SIZE_COUNT; i ++)
+    for (int32_t i = 0; i < SIZE_COUNT; i ++)
         if (s_sizes[provider - crypto_base::_AES][i].size == keylen * 8)
         {
             info = s_sizes[provider - crypto_base::_AES][i].cis[mode];
@@ -147,9 +147,12 @@ result_t Cipher_base::_new(int32_t provider, Buffer_base *key,
     return _new(provider, crypto_base::_STREAM, key, NULL, retVal);
 }
 
-Cipher::Cipher(const cipher_info_t *info) : m_info(info)
+Cipher::Cipher(const mbedtls_cipher_info_t *info) : m_info(info)
 {
-    reset();
+    mbedtls_cipher_setup(&m_ctx, m_info);
+
+    if (m_iv.length())
+        mbedtls_cipher_set_iv(&m_ctx, (unsigned char *)m_iv.c_str(), m_iv.length());
 }
 
 Cipher::~Cipher()
@@ -159,15 +162,17 @@ Cipher::~Cipher()
 
     if (m_iv.length())
         memset(&m_iv[0], 0, m_iv.length());
+
+    mbedtls_cipher_free(&m_ctx);
 }
 
 void Cipher::reset()
 {
-    memset(&m_ctx, 0, sizeof(m_ctx));
-    cipher_init_ctx(&m_ctx, m_info);
+    mbedtls_cipher_free(&m_ctx);
+    mbedtls_cipher_setup(&m_ctx, m_info);
 
     if (m_iv.length())
-        cipher_set_iv(&m_ctx, (unsigned char *)m_iv.c_str(), m_iv.length());
+        mbedtls_cipher_set_iv(&m_ctx, (unsigned char *)m_iv.c_str(), m_iv.length());
 }
 
 result_t Cipher::init(std::string &key, std::string &iv)
@@ -175,8 +180,8 @@ result_t Cipher::init(std::string &key, std::string &iv)
     m_key = key;
     m_iv = iv;
 
-    if (m_iv.length() && cipher_set_iv(&m_ctx, (unsigned char *)m_iv.c_str(),
-                                       m_iv.length()))
+    if (m_iv.length() && mbedtls_cipher_set_iv(&m_ctx, (unsigned char *)m_iv.c_str(),
+            m_iv.length()))
     {
         m_iv.resize(0);
         return CHECK_ERROR(Runtime::setError("Cipher: Invalid iv size"));
@@ -187,48 +192,48 @@ result_t Cipher::init(std::string &key, std::string &iv)
 
 result_t Cipher::get_name(std::string &retVal)
 {
-    retVal = cipher_get_name(&m_ctx);
+    retVal = mbedtls_cipher_get_name(&m_ctx);
     return 0;
 }
 
 result_t Cipher::get_keySize(int32_t &retVal)
 {
-    retVal = cipher_get_key_size(&m_ctx);
+    retVal = mbedtls_cipher_get_key_bitlen(&m_ctx);
     return 0;
 }
 
 result_t Cipher::get_ivSize(int32_t &retVal)
 {
-    retVal = cipher_get_iv_size(&m_ctx);
+    retVal = mbedtls_cipher_get_iv_size(&m_ctx);
     return 0;
 }
 
 result_t Cipher::get_blockSize(int32_t &retVal)
 {
-    retVal = cipher_get_block_size(&m_ctx);
+    retVal = mbedtls_cipher_get_block_size(&m_ctx);
     return 0;
 }
 
 result_t Cipher::paddingMode(int32_t mode)
 {
-    int ret = cipher_set_padding_mode(&m_ctx, (cipher_padding_t)mode);
+    int32_t ret = mbedtls_cipher_set_padding_mode(&m_ctx, (mbedtls_cipher_padding_t)mode);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
     return 0;
 }
 
-result_t Cipher::process(const operation_t operation, Buffer_base *data,
+result_t Cipher::process(const mbedtls_operation_t operation, Buffer_base *data,
                          obj_ptr<Buffer_base> &retVal)
 {
-    int ret;
+    int32_t ret;
 
-    ret = cipher_setkey(&m_ctx, (unsigned char *)m_key.c_str(), (int)m_key.length() * 8,
-                        operation);
+    ret = mbedtls_cipher_setkey(&m_ctx, (unsigned char *)m_key.c_str(), (int32_t)m_key.length() * 8,
+                                operation);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
-    ret = cipher_reset(&m_ctx);
+    ret = mbedtls_cipher_reset(&m_ctx);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -238,16 +243,16 @@ result_t Cipher::process(const operation_t operation, Buffer_base *data,
     size_t olen, ilen, offset, block_size, data_size;
 
     data->toString(input);
-    block_size = cipher_get_block_size(&m_ctx);
+    block_size = mbedtls_cipher_get_block_size(&m_ctx);
     data_size = input.length();
 
     for (offset = 0; offset < data_size; offset += block_size)
     {
-        ilen = ((unsigned int)data_size - offset > block_size) ?
-               block_size : (unsigned int)(data_size - offset);
+        ilen = ((uint32_t)data_size - offset > block_size) ?
+               block_size : (uint32_t)(data_size - offset);
 
-        ret = cipher_update(&m_ctx, (unsigned char *)input.c_str() + offset,
-                            ilen, buffer, &olen);
+        ret = mbedtls_cipher_update(&m_ctx, (unsigned char *)input.c_str() + offset,
+                                    ilen, buffer, &olen);
         if (ret != 0)
         {
             reset();
@@ -257,7 +262,7 @@ result_t Cipher::process(const operation_t operation, Buffer_base *data,
         output.append((const char *)buffer, olen);
     }
 
-    ret = cipher_finish(&m_ctx, buffer, &olen);
+    ret = mbedtls_cipher_finish(&m_ctx, buffer, &olen);
     reset();
 
     if (ret != 0)
@@ -270,21 +275,21 @@ result_t Cipher::process(const operation_t operation, Buffer_base *data,
 }
 
 result_t Cipher::encrypt(Buffer_base *data, obj_ptr<Buffer_base> &retVal,
-                         exlib::AsyncEvent *ac)
+                         AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
-    return process(POLARSSL_ENCRYPT, data, retVal);
+    return process(MBEDTLS_ENCRYPT, data, retVal);
 }
 
 result_t Cipher::decrypt(Buffer_base *data, obj_ptr<Buffer_base> &retVal,
-                         exlib::AsyncEvent *ac)
+                         AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
-    return process(POLARSSL_DECRYPT, data, retVal);
+    return process(MBEDTLS_DECRYPT, data, retVal);
 }
 
 }

@@ -15,7 +15,7 @@ namespace fibjs
 #define AC_END     2
 
 result_t AsyncWaitHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
-                                  exlib::AsyncEvent *ac)
+                                  AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -37,7 +37,7 @@ result_t AsyncWaitHandler::end()
 {
     if (m_stat.xchg(AC_END) == AC_WAIT)
     {
-        s_acPool.put(m_as);
+        m_as->async();
         m_as = NULL;
     }
 

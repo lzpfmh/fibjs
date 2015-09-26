@@ -85,6 +85,12 @@
     <Filter Include="Source Files\xml">
       <UniqueIdentifier>{bb0b6946-169f-4796-b08c-abcf056dcc11}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\profiler">
+      <UniqueIdentifier>{85b70cf4-a7fa-4ff4-bfd0-c67c1a59802f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\websocket">
+      <UniqueIdentifier>{232f65a2-2152-4311-bdc2-fd62de813074}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\ifs\console.h">
@@ -100,9 +106,6 @@
       <Filter>Header Files\ifs</Filter>
     </ClInclude>
     <ClInclude Include="include\ifs\Fiber.h">
-      <Filter>Header Files\ifs</Filter>
-    </ClInclude>
-    <ClInclude Include="include\ifs\Function.h">
       <Filter>Header Files\ifs</Filter>
     </ClInclude>
     <ClInclude Include="include\ifs\global.h">
@@ -271,6 +274,15 @@
       <Filter>Header Files\ifs</Filter>
     </ClInclude>
     <ClInclude Include="include\ifs\vm.h">
+      <Filter>Header Files\ifs</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ifs\websocket.h">
+      <Filter>Header Files\ifs</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ifs\WebSocketHandler.h">
+      <Filter>Header Files\ifs</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ifs\WebSocketMessage.h">
       <Filter>Header Files\ifs</Filter>
     </ClInclude>
     <ClInclude Include="include\ifs\MongoCollection.h">
@@ -744,6 +756,42 @@
     <ClInclude Include="include\XmlNamedNodeMap.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\ifs\HeapGraphEdge.h">
+      <Filter>Header Files\ifs</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ifs\HeapGraphNode.h">
+      <Filter>Header Files\ifs</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ifs\HeapSnapshot.h">
+      <Filter>Header Files\ifs</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ifs\profiler.h">
+      <Filter>Header Files\ifs</Filter>
+    </ClInclude>
+    <ClInclude Include="include\HeapGraphEdge.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\HeapGraphNode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\HeapSnapshot.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\HttpsServer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Isolate.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\HeapProxy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\WebSocketHandler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\WebSocketMessage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="include\object_async.inl">
@@ -761,6 +809,15 @@
       <Filter>Source Files\base</Filter>
     </ClCompile>
     <ClCompile Include="src\base\fuck_sym.cpp">
+      <Filter>Source Files\base</Filter>
+    </ClCompile>
+    <ClCompile Include="src\base\je_bridge.cpp">
+      <Filter>Source Files\base</Filter>
+    </ClCompile>
+    <ClCompile Include="src\base\options.cpp">
+      <Filter>Source Files\base</Filter>
+    </ClCompile>
+    <ClCompile Include="src\base\profile.cpp">
       <Filter>Source Files\base</Filter>
     </ClCompile>
     <ClCompile Include="src\base\Runtime.cpp">
@@ -794,6 +851,9 @@
       <Filter>Source Files\console</Filter>
     </ClCompile>
     <ClCompile Include="src\console\console_std.cpp">
+      <Filter>Source Files\console</Filter>
+    </ClCompile>
+    <ClCompile Include="src\console\console_stream.cpp">
       <Filter>Source Files\console</Filter>
     </ClCompile>
     <ClCompile Include="src\console\console_sys.cpp">
@@ -907,6 +967,9 @@
     <ClCompile Include="src\encoding\encoding_iconv.cpp">
       <Filter>Source Files\encoding</Filter>
     </ClCompile>
+    <ClCompile Include="src\encoding\encoding_json.cpp">
+      <Filter>Source Files\encoding</Filter>
+    </ClCompile>
     <ClCompile Include="src\fs\File.cpp">
       <Filter>Source Files\fs</Filter>
     </ClCompile>
@@ -920,9 +983,6 @@
       <Filter>Source Files\fs</Filter>
     </ClCompile>
     <ClCompile Include="src\global\Buffer.cpp">
-      <Filter>Source Files\global</Filter>
-    </ClCompile>
-    <ClCompile Include="src\global\Function.cpp">
       <Filter>Source Files\global</Filter>
     </ClCompile>
     <ClCompile Include="src\global\global.cpp">
@@ -1155,6 +1215,30 @@
     </ClCompile>
     <ClCompile Include="src\xml\XmlParser_html.cpp">
       <Filter>Source Files\xml</Filter>
+    </ClCompile>
+    <ClCompile Include="src\profiler\HeapDiff.cpp">
+      <Filter>Source Files\profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\profiler\HeapGraphEdge.cpp">
+      <Filter>Source Files\profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\profiler\HeapGraphNode.cpp">
+      <Filter>Source Files\profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\profiler\HeapProxy.cpp">
+      <Filter>Source Files\profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\profiler\HeapSnapshot.cpp">
+      <Filter>Source Files\profiler</Filter>
+    </ClCompile>
+    <ClCompile Include="src\websocket\WebSocketHandler.cpp">
+      <Filter>Source Files\websocket</Filter>
+    </ClCompile>
+    <ClCompile Include="src\websocket\WebSocketMessage.cpp">
+      <Filter>Source Files\websocket</Filter>
+    </ClCompile>
+    <ClCompile Include="src\websocket\websocket.cpp">
+      <Filter>Source Files\websocket</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

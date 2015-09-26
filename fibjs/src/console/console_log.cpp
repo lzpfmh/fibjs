@@ -11,13 +11,18 @@ namespace fibjs
 {
 
 static int32_t s_loglevel = console_base::_NOTSET;
-
-std_logger s_std;
+std_logger* s_std;
+stream_logger* s_stream;
 
 #define MAX_LOGGER  10
-static obj_ptr<logger> s_logs[MAX_LOGGER];
+static logger* s_logs[MAX_LOGGER];
 
-void asyncLog(int priority, std::string msg)
+void init_logger()
+{
+    s_std = new std_logger;
+}
+
+void asyncLog(int32_t priority, std::string msg)
 {
     if (priority <= s_loglevel)
     {
@@ -25,7 +30,7 @@ void asyncLog(int priority, std::string msg)
 
         for (i = 0; i < MAX_LOGGER; i ++)
         {
-            obj_ptr<logger> lgr = s_logs[i];
+            logger* lgr = s_logs[i];
 
             if (lgr)
                 lgr->log(priority, msg);
@@ -34,25 +39,28 @@ void asyncLog(int priority, std::string msg)
         }
 
         if (i == 0)
-            s_std.log(priority, msg);
+            s_std->log(priority, msg);
+
+        if (s_stream)
+            s_stream->log(priority, msg);
     }
 }
 
-void flushLog()
+void flushLog(bool bFiber)
 {
     int32_t i;
 
     for (i = 0; i < MAX_LOGGER; i ++)
     {
-        obj_ptr<logger> lgr = s_logs[i];
+        logger* lgr = s_logs[i];
 
         if (lgr)
-            lgr->flush();
+            lgr->flush(bFiber);
         else
             break;
     }
 
-    s_std.flush();
+    s_std->flush(bFiber);
 }
 
 result_t console_base::get_loglevel(int32_t &retVal)
@@ -77,24 +85,24 @@ result_t console_base::add(v8::Local<v8::Value> cfg)
 {
     int32_t n = 0;
 
-    for (n = 0; s_logs[n]; n ++);
+    for (n = 0; n < MAX_LOGGER && s_logs[n]; n ++);
 
     if (n >= MAX_LOGGER)
         return CHECK_ERROR(Runtime::setError("Too many items."));
 
     v8::Local<v8::Value> type;
     v8::Local<v8::Object> o;
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     if (cfg->IsString() || cfg->IsStringObject())
     {
         type = cfg;
-        o = v8::Object::New(isolate.isolate);
+        o = v8::Object::New(isolate->m_isolate);
     }
     else if (cfg->IsObject())
     {
         o = v8::Local<v8::Object>::Cast(cfg);
-        type = o->Get( v8::String::NewFromUtf8(isolate.isolate, "type",
+        type = o->Get( v8::String::NewFromUtf8(isolate->m_isolate, "type",
                                                v8::String::kNormalString, 4));
 
         if (IsEmpty(type))
@@ -107,16 +115,14 @@ result_t console_base::add(v8::Local<v8::Value> cfg)
     if (!*s)
         return CHECK_ERROR(Runtime::setError("Unknown log type."));
 
-    obj_ptr<logger> lgr;
+    logger* lgr;
 
     if (!qstrcmp(*s, "console"))
         lgr = new std_logger();
-    else if (!qstrcmp(*s, "syslog"))
-    {
 #ifndef _WIN32
+    else if (!qstrcmp(*s, "syslog"))
         lgr = new sys_logger();
 #endif
-    }
     else if (!qstrcmp(*s, "file"))
         lgr = new file_logger();
     else
@@ -159,12 +165,12 @@ result_t console_base::reset()
 
     for (i = 0; i < MAX_LOGGER; i ++)
     {
-        obj_ptr<logger> lgr = s_logs[i];
+        logger* lgr = s_logs[i];
 
         if (lgr)
         {
             lgr->stop();
-            s_logs[i].Release();
+            s_logs[i] = 0;
         }
         else
             break;

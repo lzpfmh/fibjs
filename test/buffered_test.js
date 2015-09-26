@@ -10,6 +10,7 @@ var coroutine = require('coroutine');
 describe("buffered stream", function() {
 	var s;
 	var f;
+	var ss;
 
 	before(function() {
 		s = '0123456789\r\n';
@@ -24,6 +25,7 @@ describe("buffered stream", function() {
 
 	after(function() {
 		fs.unlink("test0000");
+		ss.close();
 	});
 
 	function t_read(f, sz) {
@@ -37,6 +39,7 @@ describe("buffered stream", function() {
 				break;
 			assert.equal(d.toString(), s.substring(p, p + sz));
 			p += sz;
+			d.dispose();
 		}
 		f.close();
 	}
@@ -57,10 +60,10 @@ describe("buffered stream", function() {
 			}
 		}
 
-		var s1 = new net.Socket();
-		s1.bind(8182);
-		s1.listen();
-		coroutine.start(accept1, s1);
+		ss = new net.Socket();
+		ss.bind(8182);
+		ss.listen();
+		coroutine.start(accept1, ss);
 
 		for (var i = 3; i < 100000; i *= 3) {
 			var conn = new net.Socket();
@@ -91,82 +94,6 @@ describe("buffered stream", function() {
 		assert.equal(r.readLine(10), '0123456789');
 		assert.throws(function() {
 			r.readLine(9);
-		});
-
-		f.close();
-	});
-
-	it('packet read&write', function() {
-		f = fs.open("test0000", 'w+');
-		var r = new io.BufferedStream(f);
-
-		for (var i = 0; i < 1000; i++)
-			r.writePacket(s.substring(0, i));
-
-		f.rewind();
-		for (var i = 0; i < 1000; i++)
-			assert.equal(r.readPacket().toString(), s.substring(0, i));
-	});
-
-	it("PacketMessage sendTo", function() {
-		f.rewind();
-		f.truncate(0);
-
-		var m = new mq.PacketMessage();
-
-		for (var i = 0; i < 1000; i++) {
-			m.body.write(s.substring(0, i));
-			m.sendTo(f);
-			m.clear();
-		}
-
-		f.rewind();
-		var r = new io.BufferedStream(f);
-
-		for (var i = 0; i < 1000; i++) {
-			assert.equal(r.readPacket().toString(), s.substring(0, i));
-		}
-	});
-
-	it("PacketMessage readFrom", function() {
-		f.rewind();
-		f.truncate(0);
-
-		var r = new io.BufferedStream(f);
-
-		for (var i = 1; i < 1000; i++)
-			r.writePacket(s.substring(0, i));
-
-		var m = new mq.PacketMessage();
-
-		f.rewind();
-		for (var i = 1; i < 1000; i++) {
-			m.readFrom(r);
-			assert.equal(m.body.readAll().toString(), s.substring(0, i));
-			m.clear();
-		}
-	});
-
-	it('readPacket return null at the end of file', function() {
-		f.rewind();
-		f.truncate(0);
-
-		var r = new io.BufferedStream(f);
-		assert.isNull(r.readPacket());
-	});
-
-	it('readPacket limit', function() {
-		var r = new io.BufferedStream(f);
-		f.rewind();
-		r.writePacket(s.substring(0, 65567));
-
-		f.rewind();
-		assert.equal(r.readPacket(65567).toString(), s.substring(0, 65567));
-
-		f.rewind();
-		r = new io.BufferedStream(f);
-		assert.throws(function() {
-			r.readPacket(65566);
 		});
 
 		f.close();

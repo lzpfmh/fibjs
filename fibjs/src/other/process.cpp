@@ -7,6 +7,7 @@
 
 #include "ifs/process.h"
 #include "ifs/os.h"
+#include "ifs/global.h"
 #include "File.h"
 #include "BufferedStream.h"
 
@@ -20,10 +21,10 @@
 namespace fibjs
 {
 
-static int s_argc;
+static int32_t s_argc;
 static char **s_argv;
 
-void init_argv(int argc, char **argv)
+void init_argv(int32_t argc, char **argv)
 {
     s_argc = argc;
     s_argv = argv;
@@ -31,11 +32,11 @@ void init_argv(int argc, char **argv)
 
 result_t process_base::get_argv(v8::Local<v8::Array> &retVal)
 {
-    Isolate &isolate = Isolate::now();
-    v8::Local<v8::Array> args = v8::Array::New(isolate.isolate, s_argc);
+    Isolate* isolate = Isolate::now();
+    v8::Local<v8::Array> args = v8::Array::New(isolate->m_isolate, s_argc);
 
-    for (int i = 0; i < s_argc; i ++)
-        args->Set(i, v8::String::NewFromUtf8(isolate.isolate, s_argv[i]));
+    for (int32_t i = 0; i < s_argc; i ++)
+        args->Set(i, v8::String::NewFromUtf8(isolate->m_isolate, s_argv[i]));
 
     retVal = args;
 
@@ -47,9 +48,16 @@ result_t process_base::get_execPath(std::string &retVal)
     return os_base::get_execPath(retVal);
 }
 
+void dump_memory(int32_t serial);
+
 result_t process_base::exit(int32_t code)
 {
-    flushLog();
+    flushLog(false);
+
+#ifdef DEBUG
+    global_base::GC();
+    dump_memory(0);
+#endif
 
     ::_exit(code);
     return 0;
@@ -61,9 +69,9 @@ result_t process_base::memoryUsage(v8::Local<v8::Object> &retVal)
 }
 
 result_t process_base::system(const char *cmd, int32_t &retVal,
-                              exlib::AsyncEvent *ac)
+                              AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
 #ifdef _WIN32
@@ -76,9 +84,9 @@ result_t process_base::system(const char *cmd, int32_t &retVal,
 }
 
 result_t process_base::popen(const char *cmd,
-                             obj_ptr<BufferedStream_base> &retVal, exlib::AsyncEvent *ac)
+                             obj_ptr<BufferedStream_base> &retVal, AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
 #ifdef _WIN32

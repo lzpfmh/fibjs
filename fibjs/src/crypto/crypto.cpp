@@ -69,30 +69,30 @@ result_t crypto_base::loadReq(const char* filename, obj_ptr<X509Req_base>& retVa
 }
 
 result_t crypto_base::randomBytes(int32_t size, obj_ptr<Buffer_base> &retVal,
-                                  exlib::AsyncEvent *ac)
+                                  AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     time_t t;
-    int i, ret;
-    havege_state hs;
+    int32_t i, ret;
+    mbedtls_havege_state hs;
     unsigned char buf[1024];
     std::string strBuf;
 
     strBuf.resize(size);
 
-    havege_init(&hs);
+    mbedtls_havege_init(&hs);
 
     t = time(NULL);
 
     for (i = 0; i < size; i += sizeof(buf))
     {
-        ret = havege_random(&hs, buf, sizeof(buf));
+        ret = mbedtls_havege_random(&hs, buf, sizeof(buf));
         if (ret != 0)
             return CHECK_ERROR(_ssl::setError(ret));
 
-        memcpy(&strBuf[i], buf, size - i > (int)sizeof(buf) ? (int)sizeof(buf) : size - i);
+        memcpy(&strBuf[i], buf, size - i > (int32_t)sizeof(buf) ? (int32_t)sizeof(buf) : size - i);
     }
 
     if (t == time(NULL))
@@ -104,59 +104,59 @@ result_t crypto_base::randomBytes(int32_t size, obj_ptr<Buffer_base> &retVal,
 }
 
 result_t crypto_base::pseudoRandomBytes(int32_t size, obj_ptr<Buffer_base> &retVal,
-                                        exlib::AsyncEvent *ac)
+                                        AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
-    int i, ret;
-    entropy_context entropy;
-    unsigned char buf[ENTROPY_BLOCK_SIZE];
+    int32_t i, ret;
+    mbedtls_entropy_context entropy;
+    unsigned char buf[MBEDTLS_ENTROPY_BLOCK_SIZE];
     std::string strBuf;
 
     strBuf.resize(size);
 
-    entropy_init(&entropy);
+    mbedtls_entropy_init(&entropy);
 
     for (i = 0; i < size; i += sizeof(buf))
     {
-        ret = entropy_func(&entropy, buf, sizeof(buf));
+        ret = mbedtls_entropy_func(&entropy, buf, sizeof(buf));
         if (ret != 0)
         {
-            entropy_free(&entropy);
+            mbedtls_entropy_free(&entropy);
             return CHECK_ERROR(_ssl::setError(ret));
         }
 
-        memcpy(&strBuf[i], buf, size - i > (int)sizeof(buf) ? (int)sizeof(buf) : size - i);
+        memcpy(&strBuf[i], buf, size - i > (int32_t)sizeof(buf) ? (int32_t)sizeof(buf) : size - i);
     }
 
-    entropy_free(&entropy);
+    mbedtls_entropy_free(&entropy);
     retVal = new Buffer(strBuf);
 
     return 0;
 }
 
-inline int _max(int a, int b)
+inline int32_t _max(int32_t a, int32_t b)
 {
     return a > b ? a : b;
 }
 
-inline int _min(int a, int b)
+inline int32_t _min(int32_t a, int32_t b)
 {
     return a < b ? a : b;
 }
 
 char *randomart(const unsigned char *dgst_raw, size_t dgst_raw_len,
-                const char *title, int size)
+                const char *title, int32_t size)
 {
     const char augmentation_string[] = " .o+=*BOX@%&#/^SE";
     char *retval, *p;
     unsigned char *field;
-    int i, b, n;
-    int x, y;
+    int32_t i, b, n;
+    int32_t x, y;
     const size_t len = sizeof(augmentation_string) - 2;
-    int fieldY = size + 1;
-    int fieldX = size * 2 + 1;
+    int32_t fieldY = size + 1;
+    int32_t fieldX = size * 2 + 1;
 
     retval = (char *)calloc(1, (fieldX + 3) * (fieldY + 2));
     if (retval == NULL)
@@ -166,9 +166,9 @@ char *randomart(const unsigned char *dgst_raw, size_t dgst_raw_len,
     x = fieldX / 2;
     y = fieldY / 2;
 
-    for (i = 0; i < (int)dgst_raw_len; i++)
+    for (i = 0; i < (int32_t)dgst_raw_len; i++)
     {
-        int input;
+        int32_t input;
 
         input = dgst_raw[i];
         for (b = 0; b < 4; b++)
@@ -197,7 +197,7 @@ char *randomart(const unsigned char *dgst_raw, size_t dgst_raw_len,
     *p++ = '+';
     *p++ = '\n';
 
-    n = (int)qstrlen(title);
+    n = (int32_t)qstrlen(title);
     if (n > 0)
     {
         if ( n > fieldX - 2)

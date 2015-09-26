@@ -9,7 +9,10 @@
 #define MYSQL_H_
 
 #include "ifs/MySQL.h"
+extern "C"
+{
 #include <umysql/include/umysql.h>
+}
 
 namespace fibjs
 {
@@ -22,40 +25,37 @@ public:
     {
     }
 
-    virtual ~mysql()
-    {
-        close(NULL);
-    }
+    virtual ~mysql();
 
 public:
     // DbConnection_base
-    virtual result_t close(exlib::AsyncEvent *ac);
-    virtual result_t begin(exlib::AsyncEvent *ac);
-    virtual result_t commit(exlib::AsyncEvent *ac);
-    virtual result_t rollback(exlib::AsyncEvent *ac);
-    virtual result_t execute(const char *sql, obj_ptr<DBResult_base> &retVal, exlib::AsyncEvent *ac);
+    virtual result_t close(AsyncEvent *ac);
+    virtual result_t begin(AsyncEvent *ac);
+    virtual result_t commit(AsyncEvent *ac);
+    virtual result_t rollback(AsyncEvent *ac);
+    virtual result_t execute(const char *sql, obj_ptr<DBResult_base> &retVal, AsyncEvent *ac);
     virtual result_t execute(const char *sql, const v8::FunctionCallbackInfo<v8::Value> &args, obj_ptr<DBResult_base> &retVal);
     virtual result_t format(const char *sql, const v8::FunctionCallbackInfo<v8::Value> &args, std::string &retVal);
 
 public:
     // MySQL_base
-    virtual result_t use(const char *dbName, exlib::AsyncEvent *ac);
+    virtual result_t use(const char *dbName, AsyncEvent *ac);
     virtual result_t get_rxBufferSize(int32_t &retVal);
     virtual result_t set_rxBufferSize(int32_t newVal);
     virtual result_t get_txBufferSize(int32_t &retVal);
     virtual result_t set_txBufferSize(int32_t newVal);
 
 public:
-    result_t connect(const char *host, int port, const char *username,
+    result_t connect(const char *host, int32_t port, const char *username,
                      const char *password, const char *dbName);
-    result_t execute(const char *sql, int sLen, obj_ptr<DBResult_base> &retVal);
+    result_t execute(const char *sql, int32_t sLen, obj_ptr<DBResult_base> &retVal);
 
 private:
     inline result_t error()
     {
         const char *errorMessage = NULL;
-        int errCode;
-        int errType;
+        int32_t errCode;
+        int32_t errType;
 
         if (UMConnection_GetLastError(m_conn, &errorMessage, &errCode,
                                       &errType))

@@ -45,17 +45,17 @@ result_t HttpRequest::set_body(SeekableStream_base *newVal)
 }
 
 result_t HttpRequest::read(int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                           exlib::AsyncEvent *ac)
+                           AsyncEvent *ac)
 {
     return m_message.read(bytes, retVal, ac);
 }
 
-result_t HttpRequest::readAll(obj_ptr<Buffer_base> &retVal, exlib::AsyncEvent *ac)
+result_t HttpRequest::readAll(obj_ptr<Buffer_base> &retVal, AsyncEvent *ac)
 {
     return m_message.readAll(retVal, ac);
 }
 
-result_t HttpRequest::write(Buffer_base *data, exlib::AsyncEvent *ac)
+result_t HttpRequest::write(Buffer_base *data, AsyncEvent *ac)
 {
     return m_message.write(data, ac);
 }
@@ -73,6 +73,16 @@ result_t HttpRequest::get_keepAlive(bool &retVal)
 result_t HttpRequest::set_keepAlive(bool newVal)
 {
     return m_message.set_keepAlive(newVal);
+}
+
+result_t HttpRequest::get_upgrade(bool &retVal)
+{
+    return m_message.get_upgrade(retVal);
+}
+
+result_t HttpRequest::set_upgrade(bool newVal)
+{
+    return m_message.set_upgrade(newVal);
 }
 
 result_t HttpRequest::get_maxHeadersCount(int32_t &retVal)
@@ -110,7 +120,7 @@ result_t HttpRequest::allHeader(const char *name, obj_ptr<List_base> &retVal)
     return m_message.allHeader(name, retVal);
 }
 
-result_t HttpRequest::addHeader(v8::Local<v8::Object> map)
+result_t HttpRequest::addHeader(Map_base* map)
 {
     return m_message.addHeader(map);
 }
@@ -120,7 +130,7 @@ result_t HttpRequest::addHeader(const char *name, Variant value)
     return m_message.addHeader(name, value);
 }
 
-result_t HttpRequest::setHeader(v8::Local<v8::Object> map)
+result_t HttpRequest::setHeader(Map_base* map)
 {
     return m_message.setHeader(map);
 }
@@ -182,7 +192,7 @@ result_t HttpRequest::clear()
     return 0;
 }
 
-result_t HttpRequest::sendTo(Stream_base *stm, exlib::AsyncEvent *ac)
+result_t HttpRequest::sendTo(Stream_base *stm, AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -190,35 +200,35 @@ result_t HttpRequest::sendTo(Stream_base *stm, exlib::AsyncEvent *ac)
     std::string strCommand = m_method;
     std::string strProtocol;
 
-    strCommand += ' ';
+    strCommand.append(1, ' ');
     strCommand.append(m_address);
     if (!m_queryString.empty())
     {
-        strCommand += '?';
+        strCommand.append(1, '?');
         strCommand.append(m_queryString);
     }
 
     get_protocol(strProtocol);
-    strCommand += ' ';
+    strCommand.append(1, ' ');
     strCommand.append(strProtocol);
 
     return m_message.sendTo(stm, strCommand, ac);
 }
 
-result_t HttpRequest::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
+result_t HttpRequest::readFrom(BufferedStream_base *stm, AsyncEvent *ac)
 {
-    class asyncReadFrom: public asyncState
+    class asyncReadFrom: public AsyncState
     {
     public:
         asyncReadFrom(HttpRequest *pThis, BufferedStream_base *stm,
-                      exlib::AsyncEvent *ac) :
-            asyncState(ac), m_pThis(pThis), m_stm(stm)
+                      AsyncEvent *ac) :
+            AsyncState(ac), m_pThis(pThis), m_stm(stm)
         {
             m_pThis->clear();
             set(begin);
         }
 
-        static int begin(asyncState *pState, int n)
+        static int32_t begin(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
 
@@ -227,7 +237,7 @@ result_t HttpRequest::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
                                           pThis);
         }
 
-        static int command(asyncState *pState, int n)
+        static int32_t command(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
 
@@ -340,7 +350,7 @@ void HttpRequest::parse(std::string &str, char split,
     obj_ptr<HttpCollection> c = new HttpCollection();
 
     const char *pstr = str.c_str();
-    int nSize = (int) str.length();
+    int32_t nSize = (int32_t) str.length();
     const char *pstrTemp;
     std::string strKey, strValue;
 
@@ -360,7 +370,7 @@ void HttpRequest::parse(std::string &str, char split,
         }
 
         if (pstr > pstrTemp)
-            Url::decodeURI(pstrTemp, (int) (pstr - pstrTemp), strKey, true);
+            Url::decodeURI(pstrTemp, (int32_t) (pstr - pstrTemp), strKey, true);
         else
             strKey.clear();
 
@@ -380,7 +390,7 @@ void HttpRequest::parse(std::string &str, char split,
         if (!strKey.empty())
         {
             if (pstr > pstrTemp)
-                Url::decodeURI(pstrTemp, (int) (pstr - pstrTemp), strValue, true);
+                Url::decodeURI(pstrTemp, (int32_t) (pstr - pstrTemp), strValue, true);
             else
                 strValue.clear();
         }

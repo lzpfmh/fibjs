@@ -21,7 +21,7 @@ namespace fibjs
 static const char *s_staticCounter[] =
 { "total", "pendding" };
 static const char *s_Counter[] =
-{ "request", "response", "error", "error_400", "error_404", "error_500" };
+{ "request", "response", "error", "error_400", "error_404", "error_500", "totalTime" };
 
 enum
 {
@@ -32,7 +32,8 @@ enum
     HTTP_ERROR,
     HTTP_ERROR_400,
     HTTP_ERROR_404,
-    HTTP_ERROR_500
+    HTTP_ERROR_500,
+    HTTP_TOTAL_TIME
 };
 
 result_t HttpHandler_base::_new(v8::Local<v8::Value> hdlr,
@@ -58,19 +59,19 @@ HttpHandler::HttpHandler() :
         128), m_maxUploadSize(67108864)
 {
     m_stats = new Stats();
-    m_stats->init(s_staticCounter, 2, s_Counter, 6);
+    m_stats->init(s_staticCounter, 2, s_Counter, 7);
 }
 
 static std::string s_crossdomain;
 
 result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
-                             exlib::AsyncEvent *ac)
+                             AsyncEvent *ac)
 {
-    class asyncInvoke: public asyncState
+    class asyncInvoke: public AsyncState
     {
     public:
-        asyncInvoke(HttpHandler *pThis, Stream_base *stm, exlib::AsyncEvent *ac) :
-            asyncState(ac), m_pThis(pThis), m_stm(stm)
+        asyncInvoke(HttpHandler *pThis, Stream_base *stm, AsyncEvent *ac) :
+            AsyncState(ac), m_pThis(pThis), m_stm(stm)
         {
             m_stmBuffered = new BufferedStream(stm);
             m_stmBuffered->set_EOL("\r\n");
@@ -87,7 +88,7 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             set(read);
         }
 
-        static int read(asyncState *pState, int n)
+        static int32_t read(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
             bool bKeepAlive = false;
@@ -103,7 +104,7 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             return pThis->m_req->readFrom(pThis->m_stmBuffered, pThis);
         }
 
-        static int invoke(asyncState *pState, int n)
+        static int32_t invoke(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
 
@@ -125,6 +126,7 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             pThis->m_rep->set_keepAlive(bKeepAlive);
 
             pThis->set(send);
+            pThis->m_d.now();
 
             if (pThis->m_pThis->m_crossDomain)
             {
@@ -189,11 +191,15 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             return mq_base::invoke(pThis->m_pThis->m_hdlr, pThis->m_req, pThis);
         }
 
-        static int send(asyncState *pState, int n)
+        static int32_t send(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
             int32_t s;
             bool t = false;
+            date_t d;
+
+            d.now();
+            pThis->m_pThis->m_stats->add(HTTP_TOTAL_TIME, (int32_t)d.diff(pThis->m_d));
 
             pThis->m_rep->get_status(s);
             if (s == 200)
@@ -237,7 +243,7 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
                                               hdr) != CALL_RETURN_NULL)
                 {
                     std::string str = hdr.string();
-                    int type = 0;
+                    int32_t type = 0;
 
                     if (qstristr(str.c_str(), "gzip"))
                         type = 1;
@@ -295,7 +301,7 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             return pThis->m_rep->sendTo(pThis->m_stm, pThis);
         }
 
-        static int zip(asyncState *pState, int n)
+        static int32_t zip(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
 
@@ -305,7 +311,7 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             return pThis->m_rep->sendTo(pThis->m_stm, pThis);
         }
 
-        static int end(asyncState *pState, int n)
+        static int32_t end(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
 
@@ -322,7 +328,7 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             return pThis->m_body->close(pThis);
         }
 
-        virtual int error(int v)
+        virtual int32_t error(int32_t v)
         {
             m_pThis->m_stats->inc(HTTP_ERROR);
 
@@ -342,6 +348,7 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
                 m_rep->set_keepAlive(false);
                 m_rep->set_status(400);
                 set(send);
+                m_d.now();
                 return 0;
             }
 
@@ -357,6 +364,7 @@ result_t HttpHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
         obj_ptr<HttpResponse_base> m_rep;
         obj_ptr<MemoryStream> m_zip;
         obj_ptr<SeekableStream_base> m_body;
+        date_t m_d;
     };
 
     if (!ac)
@@ -439,7 +447,7 @@ result_t HttpHandler::get_handler(obj_ptr<Handler_base> &retVal)
 
 result_t HttpHandler::set_handler(Handler_base *newVal)
 {
-    wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now().isolate, "handler"), newVal->wrap());
+    wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now()->m_isolate, "handler"), newVal->wrap());
     m_hdlr = newVal;
     return 0;
 }

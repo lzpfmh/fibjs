@@ -9,6 +9,7 @@
 #include "XmlNodeImpl.h"
 #include "XmlNodeList.h"
 #include "XmlNamedNodeMap.h"
+#include "StringBuffer.h"
 
 #ifndef XMLELEMENT_H_
 #define XMLELEMENT_H_
@@ -144,7 +145,7 @@ public:
 
     void getElementsByTagName(const char *tagName, obj_ptr<XmlNodeList> &retVal)
     {
-        std::vector<XmlNodeImpl *> &childs = m_childs->m_childs;
+        QuickArray<XmlNodeImpl *> &childs = m_childs->m_childs;
         int32_t sz = (int32_t)childs.size();
         int32_t i;
 
@@ -165,7 +166,7 @@ public:
             return 0;
         }
 
-        std::vector<XmlNodeImpl *> &childs = m_childs->m_childs;
+        QuickArray<XmlNodeImpl *> &childs = m_childs->m_childs;
         int32_t sz = (int32_t)childs.size();
         int32_t i;
 
@@ -180,9 +181,9 @@ public:
         return CALL_RETURN_NULL;
     }
 
-    void getTextContent(std::vector<std::string> &retVal)
+    void getTextContent(StringBuffer &retVal)
     {
-        std::vector<XmlNodeImpl *> &childs = m_childs->m_childs;
+        QuickArray<XmlNodeImpl *> &childs = m_childs->m_childs;
         int32_t sz = (int32_t)childs.size();
         int32_t i;
 
@@ -196,7 +197,7 @@ public:
             {
                 std::string value;
                 childs[i]->m_node->get_nodeValue(value);
-                retVal.push_back(value);
+                retVal.append(value);
             }
     }
 
@@ -215,7 +216,7 @@ public:
     void getElementsByTagNameNS(const char *namespaceURI, const char *localName,
                                 obj_ptr<XmlNodeList> &retVal)
     {
-        std::vector<XmlNodeImpl *> &childs = m_childs->m_childs;
+        QuickArray<XmlNodeImpl *> &childs = m_childs->m_childs;
         int32_t sz = (int32_t)childs.size();
         int32_t i;
 

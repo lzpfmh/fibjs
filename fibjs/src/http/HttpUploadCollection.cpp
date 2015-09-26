@@ -9,6 +9,7 @@
 #include "HttpUploadData.h"
 #include "MemoryStream.h"
 #include "List.h"
+#include "Map.h"
 #include <string.h>
 
 namespace fibjs
@@ -17,14 +18,14 @@ namespace fibjs
 void HttpUploadCollection::parse(std::string &str, const char *boundary)
 {
     const char *pstr = str.c_str();
-    int nSize = (int) str.length();
+    int32_t nSize = (int32_t) str.length();
     std::string strName;
     std::string strFileName;
     std::string strContentType;
     std::string strContentTransferEncoding;
     const char *p, *p1, *p2, *szQueryString;
     const char *pstrSplit;
-    int uiSplitSize;
+    int32_t uiSplitSize;
     char ch;
 
     boundary += 20;
@@ -35,7 +36,7 @@ void HttpUploadCollection::parse(std::string &str, const char *boundary)
         return;
 
     boundary += 9;
-    uiSplitSize = (int) qstrlen(boundary);
+    uiSplitSize = (int32_t) qstrlen(boundary);
 
     pstrSplit = szQueryString = pstr;
 
@@ -111,7 +112,7 @@ void HttpUploadCollection::parse(std::string &str, const char *boundary)
                     while (p1 < p && *p1 != ch)
                         p1++;
 
-                    strName.assign(p2, (int) (p1 - p2));
+                    strName.assign(p2, (int32_t) (p1 - p2));
 
                     if (p1 < p && *p1 == '\"')
                         p1++;
@@ -144,7 +145,7 @@ void HttpUploadCollection::parse(std::string &str, const char *boundary)
                             p1++;
                         }
 
-                        strFileName.assign(p2, (int) (p1 - p2));
+                        strFileName.assign(p2, (int32_t) (p1 - p2));
                     }
                 }
                 else if (p1 + 13 < p && !qstricmp(p1, "Content-Type:", 13))
@@ -152,14 +153,14 @@ void HttpUploadCollection::parse(std::string &str, const char *boundary)
                     p1 += 13;
                     while (p1 < p && *p1 == ' ')
                         p1++;
-                    strContentType.assign(p1, (int) (p - p1));
+                    strContentType.assign(p1, (int32_t) (p - p1));
                 }
                 else if (p1 + 26 < p && !qstricmp(p1, "Content-Transfer-Encoding:", 26))
                 {
                     p1 += 26;
                     while (p1 < p && *p1 == ' ')
                         p1++;
-                    strContentTransferEncoding.assign(p1, (int) (p - p1));
+                    strContentTransferEncoding.assign(p1, (int32_t) (p - p1));
                 }
             }
             else
@@ -186,7 +187,7 @@ void HttpUploadCollection::parse(std::string &str, const char *boundary)
         if (!p || p1 <= p + uiSplitSize)
             break;
 
-        nSize = (int) (p1 - p - uiSplitSize);
+        nSize = (int32_t) (p1 - p - uiSplitSize);
         p1 = szQueryString;
         szQueryString = p + uiSplitSize;
 
@@ -199,7 +200,7 @@ void HttpUploadCollection::parse(std::string &str, const char *boundary)
 
         if (!strName.empty())
         {
-            int uiSize = (int) (p - p1);
+            int32_t uiSize = (int32_t) (p - p1);
             std::string strTemp;
             Variant varTemp;
 
@@ -275,29 +276,6 @@ result_t HttpUploadCollection::all(const char *name, obj_ptr<List_base> &retVal)
     return 0;
 }
 
-inline result_t _map(HttpUploadCollection *o, v8::Local<v8::Object> m,
-                     result_t (HttpUploadCollection::*fn)(const char *name, Variant value))
-{
-    v8::Local<v8::Array> ks = m->GetPropertyNames();
-    int len = ks->Length();
-    int i;
-    result_t hr;
-
-    for (i = 0; i < len; i++)
-    {
-        v8::Local<v8::Value> k = ks->Get(i);
-
-        if (!k->IsNumber())
-        {
-            hr = (o->*fn)(*v8::String::Utf8Value(k), m->Get(k));
-            if (hr < 0)
-                return hr;
-        }
-    }
-
-    return 0;
-}
-
 result_t HttpUploadCollection::add(const char *name, Variant value)
 {
     m_names[m_count] = name;
@@ -307,9 +285,9 @@ result_t HttpUploadCollection::add(const char *name, Variant value)
     return 0;
 }
 
-result_t HttpUploadCollection::add(v8::Local<v8::Object> map)
+result_t HttpUploadCollection::add(Map_base* map)
 {
-    return _map(this, map, &HttpUploadCollection::add);
+    return ((Map*)map)->map(this, &HttpUploadCollection::add);
 }
 
 result_t HttpUploadCollection::set(const char *name, Variant value)
@@ -349,9 +327,9 @@ result_t HttpUploadCollection::set(const char *name, Variant value)
     return 0;
 }
 
-result_t HttpUploadCollection::set(v8::Local<v8::Object> map)
+result_t HttpUploadCollection::set(Map_base* map)
 {
-    return _map(this, map, &HttpUploadCollection::set);
+    return ((Map*)map)->map(this, &HttpUploadCollection::set);
 }
 
 result_t HttpUploadCollection::remove(const char *name)
@@ -385,14 +363,14 @@ result_t HttpUploadCollection::_named_getter(const char *property,
 result_t HttpUploadCollection::_named_enumerator(v8::Local<v8::Array> &retVal)
 {
     int32_t i;
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
-    retVal = v8::Array::New(isolate.isolate);
+    retVal = v8::Array::New(isolate->m_isolate);
     for (i = 0; i < m_count; i++)
         retVal->Set(i,
-                    v8::String::NewFromUtf8(isolate.isolate, m_names[i].c_str(),
+                    v8::String::NewFromUtf8(isolate->m_isolate, m_names[i].c_str(),
                                             v8::String::kNormalString,
-                                            (int) m_names[i].length()));
+                                            (int32_t) m_names[i].length()));
 
     return 0;
 }

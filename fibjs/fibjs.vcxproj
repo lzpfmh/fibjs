@@ -101,6 +101,10 @@
     <ClInclude Include="include\Fiber.h" />
     <ClInclude Include="include\File.h" />
     <ClInclude Include="include\GridFS.h" />
+    <ClInclude Include="include\HeapGraphEdge.h" />
+    <ClInclude Include="include\HeapGraphNode.h" />
+    <ClInclude Include="include\HeapProxy.h" />
+    <ClInclude Include="include\HeapSnapshot.h" />
     <ClInclude Include="include\HttpCollection.h" />
     <ClInclude Include="include\HttpCookie.h" />
     <ClInclude Include="include\HttpFileHandler.h" />
@@ -109,6 +113,7 @@
     <ClInclude Include="include\HttpRequest.h" />
     <ClInclude Include="include\HttpResponse.h" />
     <ClInclude Include="include\HttpServer.h" />
+    <ClInclude Include="include\HttpsServer.h" />
     <ClInclude Include="include\HttpUploadCollection.h" />
     <ClInclude Include="include\HttpUploadData.h" />
     <ClInclude Include="include\ifs\assert.h" />
@@ -134,12 +139,14 @@
     <ClInclude Include="include\ifs\Fiber.h" />
     <ClInclude Include="include\ifs\File.h" />
     <ClInclude Include="include\ifs\fs.h" />
-    <ClInclude Include="include\ifs\Function.h" />
     <ClInclude Include="include\ifs\gd.h" />
     <ClInclude Include="include\ifs\global.h" />
     <ClInclude Include="include\ifs\GridFS.h" />
     <ClInclude Include="include\ifs\Handler.h" />
     <ClInclude Include="include\ifs\hash.h" />
+    <ClInclude Include="include\ifs\HeapGraphEdge.h" />
+    <ClInclude Include="include\ifs\HeapGraphNode.h" />
+    <ClInclude Include="include\ifs\HeapSnapshot.h" />
     <ClInclude Include="include\ifs\http.h" />
     <ClInclude Include="include\ifs\HttpCollection.h" />
     <ClInclude Include="include\ifs\HttpCookie.h" />
@@ -175,6 +182,7 @@
     <ClInclude Include="include\ifs\path.h" />
     <ClInclude Include="include\ifs\PKey.h" />
     <ClInclude Include="include\ifs\process.h" />
+    <ClInclude Include="include\ifs\profiler.h" />
     <ClInclude Include="include\ifs\Queue.h" />
     <ClInclude Include="include\ifs\re.h" />
     <ClInclude Include="include\ifs\Redis.h" />
@@ -207,6 +215,9 @@
     <ClInclude Include="include\ifs\uuid.h" />
     <ClInclude Include="include\ifs\uuidValue.h" />
     <ClInclude Include="include\ifs\vm.h" />
+    <ClInclude Include="include\ifs\websocket.h" />
+    <ClInclude Include="include\ifs\WebSocketHandler.h" />
+    <ClInclude Include="include\ifs\WebSocketMessage.h" />
     <ClInclude Include="include\ifs\X509Cert.h" />
     <ClInclude Include="include\ifs\X509Crl.h" />
     <ClInclude Include="include\ifs\X509Req.h" />
@@ -227,6 +238,7 @@
     <ClInclude Include="include\Image.h" />
     <ClInclude Include="include\inetAddr.h" />
     <ClInclude Include="include\Int64.h" />
+    <ClInclude Include="include\Isolate.h" />
     <ClInclude Include="include\JSHandler.h" />
     <ClInclude Include="include\JsonRpcHandler.h" />
     <ClInclude Include="include\LevelDB.h" />
@@ -281,6 +293,8 @@
     <ClInclude Include="include\utils.h" />
     <ClInclude Include="include\uuidVar.h" />
     <ClInclude Include="include\Variant.h" />
+    <ClInclude Include="include\WebSocketHandler.h" />
+    <ClInclude Include="include\WebSocketMessage.h" />
     <ClInclude Include="include\X509Cert.h" />
     <ClInclude Include="include\X509Crl.h" />
     <ClInclude Include="include\X509Req.h" />
@@ -306,6 +320,9 @@
     <ClCompile Include="src\base\date.cpp" />
     <ClCompile Include="src\base\fibjs.cpp" />
     <ClCompile Include="src\base\fuck_sym.cpp" />
+    <ClCompile Include="src\base\je_bridge.cpp" />
+    <ClCompile Include="src\base\options.cpp" />
+    <ClCompile Include="src\base\profile.cpp" />
     <ClCompile Include="src\base\Runtime.cpp" />
     <ClCompile Include="src\base\utf8.cpp" />
     <ClCompile Include="src\base\utils.cpp" />
@@ -317,6 +334,7 @@
     <ClCompile Include="src\console\console_file.cpp" />
     <ClCompile Include="src\console\console_log.cpp" />
     <ClCompile Include="src\console\console_std.cpp" />
+    <ClCompile Include="src\console\console_stream.cpp" />
     <ClCompile Include="src\console\console_sys.cpp" />
     <ClCompile Include="src\console\TextColor.cpp" />
     <ClCompile Include="src\coroutine\BlockQueue.cpp" />
@@ -355,12 +373,12 @@
     <ClCompile Include="src\encoding\encoding.cpp" />
     <ClCompile Include="src\encoding\encoding_bson.cpp" />
     <ClCompile Include="src\encoding\encoding_iconv.cpp" />
+    <ClCompile Include="src\encoding\encoding_json.cpp" />
     <ClCompile Include="src\fs\File.cpp" />
     <ClCompile Include="src\fs\fs.cpp" />
     <ClCompile Include="src\fs\path.cpp" />
     <ClCompile Include="src\fs\Stat.cpp" />
     <ClCompile Include="src\global\Buffer.cpp" />
-    <ClCompile Include="src\global\Function.cpp" />
     <ClCompile Include="src\global\global.cpp" />
     <ClCompile Include="src\global\Int64.cpp" />
     <ClCompile Include="src\http\http.cpp" />
@@ -410,6 +428,11 @@
     <ClCompile Include="src\other\Regex.cpp" />
     <ClCompile Include="src\other\uuidVar.cpp" />
     <ClCompile Include="src\other\zlib.cpp" />
+    <ClCompile Include="src\profiler\HeapDiff.cpp" />
+    <ClCompile Include="src\profiler\HeapGraphEdge.cpp" />
+    <ClCompile Include="src\profiler\HeapGraphNode.cpp" />
+    <ClCompile Include="src\profiler\HeapProxy.cpp" />
+    <ClCompile Include="src\profiler\HeapSnapshot.cpp" />
     <ClCompile Include="src\sandbox\SandBox.cpp" />
     <ClCompile Include="src\sandbox\SandBox_repl.cpp" />
     <ClCompile Include="src\sandbox\SandBox_root.cpp" />
@@ -424,6 +447,9 @@
     <ClCompile Include="src\util\LruCache.cpp" />
     <ClCompile Include="src\util\Stats.cpp" />
     <ClCompile Include="src\util\util.cpp" />
+    <ClCompile Include="src\websocket\WebSocketHandler.cpp" />
+    <ClCompile Include="src\websocket\WebSocketMessage.cpp" />
+    <ClCompile Include="src\websocket\websocket.cpp" />
     <ClCompile Include="src\xml\XmlAttr.cpp" />
     <ClCompile Include="src\xml\XmlCDATASection.cpp" />
     <ClCompile Include="src\xml\XmlComment.cpp" />
@@ -512,7 +538,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CONSOLE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalIncludeDirectories>$(SolutionDir)vender;$(SolutionDir)vender/v8;include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
@@ -528,7 +554,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CONSOLE;_CRT_SECURE_NO_WARNINGS;DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalIncludeDirectories>$(SolutionDir)vender;$(SolutionDir)vender/v8;include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>

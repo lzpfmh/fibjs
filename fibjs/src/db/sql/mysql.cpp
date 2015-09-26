@@ -11,6 +11,7 @@
 #include "ifs/db.h"
 #include "DBResult.h"
 #include "Url.h"
+#include "Fiber.h"
 
 namespace fibjs
 {
@@ -27,15 +28,14 @@ void API_deleteSocket(void *sock)
 
 void API_closeSocket(void *sock)
 {
-    fibjs::socket::close(sock);
 }
 
-int API_connectSocket(void *sock, const char *host, int port)
+int32_t API_connectSocket(void *sock, const char *host, int32_t port)
 {
-    return fibjs::socket::connect(sock, host, port);
+    return fibjs::socket::c_connect(sock, host, port);
 }
 
-int API_setTimeout(void *sock, int timeoutSec)
+int32_t API_setTimeout(void *sock, int32_t timeoutSec)
 {
     return 1;
 }
@@ -44,37 +44,37 @@ void API_clearException(void)
 {
 }
 
-int API_recvSocket(void *sock, char *buffer, int cbBuffer)
+int32_t API_recvSocket(void *sock, char *buffer, int32_t cbBuffer)
 {
-    return fibjs::socket::recv(sock, buffer, cbBuffer);
+    return fibjs::socket::c_recv(sock, buffer, cbBuffer);
 }
 
-int API_sendSocket(void *sock, const char *buffer, int cbBuffer)
+int32_t API_sendSocket(void *sock, const char *buffer, int32_t cbBuffer)
 {
-    return fibjs::socket::send(sock, buffer, cbBuffer);
+    return fibjs::socket::c_send(sock, buffer, cbBuffer);
 }
 
-void *API_createResult(int columns, void *opt)
+void *API_createResult(int32_t columns)
 {
     DBResult *res = new DBResult(columns);
     res->Ref();
     return res;
 }
 
-void API_resultSetField(void *result, int ifield, UMTypeInfo *ti, void *name,
-                        size_t cbName, void *opt)
+void API_resultSetField(void *result, int32_t ifield, UMTypeInfo *ti, void *name,
+                        size_t cbName)
 {
     std::string s((char *) name, cbName);
     ((DBResult *) result)->setField(ifield, s);
 }
 
-void API_resultRowBegin(void *result, void *opt)
+void API_resultRowBegin(void *result)
 {
     ((DBResult *) result)->beginRow();
 }
 
-int API_resultRowValue(void *result, int icolumn, UMTypeInfo *ti, void *value,
-                       size_t cbValue, void *opt)
+int32_t API_resultRowValue(void *result, int32_t icolumn, UMTypeInfo *ti, void *value,
+                           size_t cbValue)
 {
     Variant v;
 
@@ -91,13 +91,13 @@ int API_resultRowValue(void *result, int icolumn, UMTypeInfo *ti, void *value,
         case MFTYPE_LONGLONG:
         case MFTYPE_FLOAT:
         case MFTYPE_DOUBLE:
-            v.parseNumber((const char *) value, (int) cbValue);
+            v.parseNumber((const char *) value, (int32_t) cbValue);
             break;
 
         case MFTYPE_DATE:
         case MFTYPE_TIME:
         case MFTYPE_DATETIME:
-            v.parseDate((const char *) value, (int) cbValue);
+            v.parseDate((const char *) value, (int32_t) cbValue);
             break;
 
         case MFTYPE_TINY_BLOB:
@@ -116,22 +116,18 @@ int API_resultRowValue(void *result, int icolumn, UMTypeInfo *ti, void *value,
     return true;
 }
 
-int API_resultRowEnd(void *result, void *opt)
+void API_resultRowEnd(void *result)
 {
-    DBResult *res = (DBResult *) result;
-
-    res->endRow();
-
-    return 1;
+    ((DBResult *) result)->endRow();
 }
 
-void API_destroyResult(void *result, void *opt)
+void API_destroyResult(void *result)
 {
     ((DBResult *) result)->Unref();
 }
 
-void *API_resultOK(UINT64 affected, UINT64 insertId, int serverStatus,
-                   const char *message, size_t len, void *opt)
+void *API_resultOK(UINT64 affected, UINT64 insertId, int32_t serverStatus,
+                   const char *message, size_t len)
 {
     DBResult *res = new DBResult(affected, insertId);
     res->Ref();
@@ -149,8 +145,11 @@ UMConnectionCAPI capi =
 // ----------------------------------------------------------------------------------
 
 result_t db_base::openMySQL(const char *connString, obj_ptr<MySQL_base> &retVal,
-                            exlib::AsyncEvent *ac)
+                            AsyncEvent *ac)
 {
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
     if (qstrcmp(connString, "mysql:", 6))
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
@@ -160,7 +159,7 @@ result_t db_base::openMySQL(const char *connString, obj_ptr<MySQL_base> &retVal,
     if (hr < 0)
         return hr;
 
-    int nPort = 3306;
+    int32_t nPort = 3306;
     if (u->m_port.length() > 0)
         nPort = atoi(u->m_port.c_str());
 
@@ -177,7 +176,22 @@ result_t db_base::openMySQL(const char *connString, obj_ptr<MySQL_base> &retVal,
     return 0;
 }
 
-result_t mysql::connect(const char *host, int port, const char *username,
+static void close_conn(UMConnection conn)
+{
+    UMConnection_Close(conn);
+    UMConnection_Destroy(conn);
+}
+
+mysql::~mysql()
+{
+    if (m_conn)
+    {
+        asyncCall(close_conn, m_conn);
+        m_conn = NULL;
+    }
+}
+
+result_t mysql::connect(const char *host, int32_t port, const char *username,
                         const char *password, const char *dbName)
 {
     if (m_conn)
@@ -197,9 +211,14 @@ result_t mysql::connect(const char *host, int port, const char *username,
 
     return 0;
 }
-
-result_t mysql::close(exlib::AsyncEvent *ac)
+result_t mysql::close(AsyncEvent *ac)
 {
+    if (!m_conn)
+        return 0;
+
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
     if (m_conn)
     {
         UMConnection_Close(m_conn);
@@ -210,51 +229,82 @@ result_t mysql::close(exlib::AsyncEvent *ac)
     return 0;
 }
 
-result_t mysql::use(const char *dbName, exlib::AsyncEvent *ac)
+result_t mysql::use(const char *dbName, AsyncEvent *ac)
 {
+    if (!m_conn)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
     obj_ptr<DBResult_base> retVal;
     std::string s("USE ", 4);
     s.append(dbName);
-    return execute(s.c_str(), (int) s.length(), retVal);
+    return execute(s.c_str(), (int32_t) s.length(), retVal);
 }
 
-result_t mysql::begin(exlib::AsyncEvent *ac)
+result_t mysql::begin(AsyncEvent *ac)
 {
+    if (!m_conn)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
     obj_ptr<DBResult_base> retVal;
     return execute("BEGIN", 5, retVal);
 }
 
-result_t mysql::commit(exlib::AsyncEvent *ac)
+result_t mysql::commit(AsyncEvent *ac)
 {
+    if (!m_conn)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
     obj_ptr<DBResult_base> retVal;
     return execute("COMMIT", 6, retVal);
 }
 
-result_t mysql::rollback(exlib::AsyncEvent *ac)
+result_t mysql::rollback(AsyncEvent *ac)
 {
+    if (!m_conn)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
     obj_ptr<DBResult_base> retVal;
     return execute("ROLLBACK", 8, retVal);
 }
 
-result_t mysql::execute(const char *sql, int sLen,
+result_t mysql::execute(const char *sql, int32_t sLen,
                         obj_ptr<DBResult_base> &retVal)
 {
     if (!m_conn)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    DBResult *res = (DBResult *) UMConnection_Query(m_conn, sql, sLen, this);
+    DBResult *res = (DBResult *) UMConnection_Query(m_conn, sql, sLen);
     if (!res)
         return CHECK_ERROR(error());
 
+    res->freeze();
     retVal = res;
     res->Unref();
 
     return 0;
 }
 
-result_t mysql::execute(const char *sql, obj_ptr<DBResult_base> &retVal, exlib::AsyncEvent *ac)
+result_t mysql::execute(const char *sql, obj_ptr<DBResult_base> &retVal, AsyncEvent *ac)
 {
-    return execute(sql, (int) qstrlen(sql), retVal);
+    if (!m_conn)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
+    if (!ac)
+        return CHECK_ERROR(CALL_E_NOSYNC);
+
+    return execute(sql, (int32_t) qstrlen(sql), retVal);
 }
 
 result_t mysql::execute(const char *sql, const v8::FunctionCallbackInfo<v8::Value> &args,
@@ -265,7 +315,7 @@ result_t mysql::execute(const char *sql, const v8::FunctionCallbackInfo<v8::Valu
     if (hr < 0)
         return hr;
 
-    return execute(str.c_str(), (int) str.length(), retVal);
+    return execute(str.c_str(), (int32_t) str.length(), retVal);
 }
 
 result_t mysql::format(const char *sql, const v8::FunctionCallbackInfo<v8::Value> &args,

@@ -14,6 +14,7 @@
 #include "utils.h"
 #include "ClassInfo.h"
 #include "Runtime.h"
+#include "AsyncCall.h"
 
 #undef min
 #undef max
@@ -22,24 +23,6 @@ namespace fibjs
 {
 
 #include "object_async.inl"
-
-class asyncEvent: public exlib::AsyncEvent
-{
-public:
-    virtual void js_callback()
-    {
-    }
-
-    virtual void invoke()
-    {
-    }
-};
-
-class asyncCallBack: public asyncEvent
-{
-public:
-    virtual void callback();
-};
 
 class object_base: public obj_base
 {
@@ -52,6 +35,7 @@ public:
 
     virtual ~object_base()
     {
+        assert(handle_.IsEmpty());
         object_base::class_info().Unref();
     }
 
@@ -92,7 +76,10 @@ public:
         if (internalUnref() == 0)
         {
             internalRef();
-            m_ar.post(0);
+            m_fast_lock.unlock();
+
+            m_ar.sync();
+            return;
         }
 
         m_fast_lock.unlock();
@@ -110,7 +97,7 @@ public:
     {
         if (!m_lock.trylock())
         {
-            v8::Unlocker unlocker(Isolate::now().isolate);
+            Isolate::rt _rt;
             m_lock.lock();
         }
     }
@@ -123,21 +110,10 @@ public:
     exlib::Locker m_lock;
 
 public:
-    static bool switchToAsync(exlib::AsyncEvent *ac)
-    {
-        if (m_singleUserMode)
-            return false;
-
-        return !ac;
-    }
-
-    static bool m_singleUserMode;
-
-public:
-    class asyncRelease: public asyncCallBack
+    class AsyncRelease: public AsyncEvent
     {
     public:
-        virtual void js_callback()
+        virtual void js_invoke()
         {
             object_base *pThis = NULL;
 
@@ -147,36 +123,35 @@ public:
             pThis->Unref();
         }
     };
-
 private:
-
-    asyncRelease m_ar;
+    AsyncRelease m_ar;
     v8::Persistent<v8::Object> handle_;
 
 private:
     static void WeakCallback(const v8::WeakCallbackData<v8::Object, object_base> &data)
     {
-        data.GetParameter()->internalDispose();
+        assert(!data.GetParameter()->handle_.IsEmpty());
+        data.GetParameter()->internalDispose(true);
     }
 
 public:
     v8::Local<v8::Object> wrap(v8::Local<v8::Object> o)
     {
-        Isolate & isolate = Isolate::now();
+        Isolate* isolate = Isolate::now();
 
         if (handle_.IsEmpty())
         {
             if (o.IsEmpty())
                 o = Classinfo().CreateInstance();
-            handle_.Reset(isolate.isolate, o);
+            handle_.Reset(isolate->m_isolate, o);
             o->SetAlignedPointerInInternalField(0, this);
 
-            isolate.isolate->AdjustAmountOfExternalAllocatedMemory(m_nExtMemory);
+            isolate->m_isolate->AdjustAmountOfExternalAllocatedMemory(m_nExtMemory);
 
             return o;
         }
 
-        return v8::Local<v8::Object>::New(isolate.isolate, handle_);
+        return v8::Local<v8::Object>::New(isolate->m_isolate, handle_);
     }
 
     v8::Local<v8::Object> wrap()
@@ -184,7 +159,7 @@ public:
         if (handle_.IsEmpty())
             return wrap(Classinfo().CreateInstance());
 
-        return v8::Local<v8::Object>::New(Isolate::now().isolate, handle_);
+        return v8::Local<v8::Object>::New(Isolate::now()->m_isolate, handle_);
     }
 
 public:
@@ -216,10 +191,10 @@ public:
     result_t off(const char *ev, int32_t &retVal);
     result_t off(v8::Local<v8::Object> map, int32_t &retVal);
     result_t trigger(const char *ev, const v8::FunctionCallbackInfo<v8::Value> &args);
-    result_t _trigger(const char *ev, v8::Local<v8::Value> *args, int argCount);
-    result_t _trigger(const char *ev, Variant *args, int argCount);
+    result_t _trigger(const char *ev, v8::Local<v8::Value> *args, int32_t argCount);
+    result_t _trigger(const char *ev, Variant *args, int32_t argCount);
 
-    void extMemory(int ext)
+    void extMemory(int32_t ext)
     {
         if (handle_.IsEmpty())
             m_nExtMemory += ext;
@@ -232,7 +207,7 @@ public:
             {
                 if (exlib::Service::hasService())
                 {
-                    Isolate::now().isolate->AdjustAmountOfExternalAllocatedMemory(ext);
+                    Isolate::now()->m_isolate->AdjustAmountOfExternalAllocatedMemory(ext);
                     m_nExtMemory += ext;
                 }
                 else
@@ -246,23 +221,23 @@ private:
                                         bool autoDelete = false);
 
 private:
-    int m_nExtMemory;
-    int m_nExtMemoryDelay;
+    int32_t m_nExtMemory;
+    int32_t m_nExtMemoryDelay;
 
-    result_t internalDispose()
+    result_t internalDispose(bool gc)
     {
         if (!handle_.IsEmpty())
         {
-            Isolate & isolate = Isolate::now();
+            Isolate* isolate = Isolate::now();
 
             handle_.ClearWeak();
-            v8::Local<v8::Object>::New(isolate.isolate, handle_)->SetAlignedPointerInInternalField(
+            v8::Local<v8::Object>::New(isolate->m_isolate, handle_)->SetAlignedPointerInInternalField(
                 0, 0);
             handle_.Reset();
 
-            isolate.isolate->AdjustAmountOfExternalAllocatedMemory(-m_nExtMemory);
+            isolate->m_isolate->AdjustAmountOfExternalAllocatedMemory(-m_nExtMemory);
 
-            obj_base::dispose();
+            obj_base::dispose(gc);
         }
 
         return 0;
@@ -276,7 +251,7 @@ public:
     // object_base
     virtual result_t dispose()
     {
-        return internalDispose();
+        return internalDispose(false);
     }
 
     virtual result_t toString(std::string &retVal)
@@ -288,7 +263,7 @@ public:
     virtual result_t toJSON(const char *key, v8::Local<v8::Value> &retVal)
     {
         v8::Local<v8::Object> o = wrap();
-        v8::Local<v8::Object> o1 = v8::Object::New(Isolate::now().isolate);
+        v8::Local<v8::Object> o1 = v8::Object::New(Isolate::now()->m_isolate);
 
         extend(o, o1);
         retVal = o1;
@@ -306,42 +281,42 @@ public:
     static void block_set(v8::Local<v8::String> property,
                           v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void> &info)
     {
-        Isolate & isolate = Isolate::now();
+        Isolate* isolate = Isolate::now();
 
         std::string strError = "Property \'";
 
         strError += *v8::String::Utf8Value(property);
         strError += "\' is read-only.";
-        isolate.isolate->ThrowException(
-            v8::String::NewFromUtf8(isolate.isolate, strError.c_str(),
-                                    v8::String::kNormalString, (int) strError.length()));
+        isolate->m_isolate->ThrowException(
+            v8::String::NewFromUtf8(isolate->m_isolate, strError.c_str(),
+                                    v8::String::kNormalString, (int32_t) strError.length()));
     }
 
     static void i_IndexedSetter(uint32_t index,
                                 v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value> &info)
     {
-        Isolate & isolate = Isolate::now();
+        Isolate* isolate = Isolate::now();
 
-        isolate.isolate->ThrowException(
-            v8::String::NewFromUtf8(isolate.isolate, "Indexed Property is read-only."));
+        isolate->m_isolate->ThrowException(
+            v8::String::NewFromUtf8(isolate->m_isolate, "Indexed Property is read-only."));
     }
 
     static void i_NamedSetter(v8::Local<v8::String> property,
                               v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value> &info)
     {
-        Isolate & isolate = Isolate::now();
+        Isolate* isolate = Isolate::now();
 
-        isolate.isolate->ThrowException(
-            v8::String::NewFromUtf8(isolate.isolate, "Named Property is read-only."));
+        isolate->m_isolate->ThrowException(
+            v8::String::NewFromUtf8(isolate->m_isolate, "Named Property is read-only."));
     }
 
     static void i_NamedDeleter(
         v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Boolean> &info)
     {
-        Isolate & isolate = Isolate::now();
+        Isolate* isolate = Isolate::now();
 
-        isolate.isolate->ThrowException(
-            v8::String::NewFromUtf8(isolate.isolate, "Named Property is read-only."));
+        isolate->m_isolate->ThrowException(
+            v8::String::NewFromUtf8(isolate->m_isolate, "Named Property is read-only."));
     }
 
     //------------------------------------------------------------------
@@ -353,13 +328,6 @@ private:
     static void s_toJSON(const v8::FunctionCallbackInfo<v8::Value> &args);
     static void s_valueOf(const v8::FunctionCallbackInfo<v8::Value> &args);
 };
-
-}
-
-#include "AsyncCall.h"
-
-namespace fibjs
-{
 
 inline void *ClassInfo::getInstance(void *o)
 {
@@ -427,7 +395,7 @@ inline void object_base::s_toJSON(const v8::FunctionCallbackInfo<v8::Value> &arg
         V8_SCOPE();
 
         v8::Local<v8::Object> o = args.This();
-        v8::Local<v8::Object> o1 = v8::Object::New(Isolate::now().isolate);
+        v8::Local<v8::Object> o1 = v8::Object::New(Isolate::now()->m_isolate);
 
         extend(o, o1);
 

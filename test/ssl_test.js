@@ -38,6 +38,14 @@ function del(f) {
 describe('ssl', function() {
 	var sss;
 
+	var ss = [];
+
+	after(function() {
+		ss.forEach(function(s) {
+			s.close();
+		});
+	});
+
 	it("echo server", function() {
 		sss = new ssl.Socket(crt, pk);
 		sss.verification = ssl.VERIFY_NONE;
@@ -62,6 +70,8 @@ describe('ssl', function() {
 			}
 		});
 		svr.asyncRun();
+
+		ss.push(svr.socket);
 	});
 
 	function test_handshake() {
@@ -124,7 +134,7 @@ describe('ssl', function() {
 	});
 
 	it("ssl.connect", function() {
-		var ss = ssl.connect('ssl://127.0.0.1:9080');
+		var ss = ssl.connect('ssl://localhost:9080');
 
 		ss.write("GET / HTTP/1.0");
 		assert.equal("GET / HTTP/1.0", ss.read());
@@ -133,7 +143,7 @@ describe('ssl', function() {
 	});
 
 	it("net.connect", function() {
-		var ss = net.connect('ssl://127.0.0.1:9080');
+		var ss = net.connect('ssl://localhost:9080');
 
 		ss.write("GET / HTTP/1.0");
 		assert.equal("GET / HTTP/1.0", ss.read());
@@ -161,6 +171,7 @@ describe('ssl', function() {
 			ss.close();
 			s.close();
 		});
+		ss.push(svr.socket);
 		svr.asyncRun();
 
 		function t_conn() {
@@ -196,19 +207,20 @@ describe('ssl', function() {
 			while (buf = s.read())
 				s.write(buf);
 		}));
+		ss.push(svr.socket);
 		svr.asyncRun();
 
 		for (var i = 0; i < 10; i++) {
 			var s1 = new net.Socket();
 			s1.connect("127.0.0.1", 9083);
 
-			var ss = new ssl.Socket();
-			ss.connect(s1);
+			var cs = new ssl.Socket();
+			cs.connect(s1);
 
-			ss.write("GET / HTTP/1.0");
-			assert.equal("GET / HTTP/1.0", ss.read());
+			cs.write("GET / HTTP/1.0");
+			assert.equal("GET / HTTP/1.0", cs.read());
 
-			ss.close();
+			cs.close();
 			s1.close();
 		}
 	});
@@ -220,19 +232,20 @@ describe('ssl', function() {
 			while (buf = s.read())
 				s.write(buf);
 		});
+		ss.push(svr.socket);
 		svr.asyncRun();
 
 		for (var i = 0; i < 10; i++) {
 			var s1 = new net.Socket();
 			s1.connect("127.0.0.1", 9084);
 
-			var ss = new ssl.Socket();
-			ss.connect(s1);
+			var cs = new ssl.Socket();
+			cs.connect(s1);
 
-			ss.write("GET / HTTP/1.0");
-			assert.equal("GET / HTTP/1.0", ss.read());
+			cs.write("GET / HTTP/1.0");
+			assert.equal("GET / HTTP/1.0", cs.read());
 
-			ss.close();
+			cs.close();
 			s1.close();
 		}
 	});

@@ -8,7 +8,7 @@
 #include "ifs/fs.h"
 #include "ssl.h"
 #include "X509Crl.h"
-#include <mbedtls/polarssl/pem.h>
+#include <mbedtls/mbedtls/pem.h>
 
 namespace fibjs
 {
@@ -21,23 +21,23 @@ result_t X509Crl_base::_new(obj_ptr<X509Crl_base> &retVal, v8::Local<v8::Object>
 
 X509Crl::X509Crl()
 {
-    x509_crl_init(&m_crl);
+    mbedtls_x509_crl_init(&m_crl);
 }
 
 X509Crl::~X509Crl()
 {
-    x509_crl_free(&m_crl);
+    mbedtls_x509_crl_free(&m_crl);
 }
 
 result_t X509Crl::load(Buffer_base *derCrl)
 {
-    int ret;
+    int32_t ret;
 
     std::string crl;
     derCrl->toString(crl);
 
-    ret = x509_crl_parse(&m_crl, (const unsigned char *)crl.c_str(),
-                         crl.length());
+    ret = mbedtls_x509_crl_parse(&m_crl, (const unsigned char *)crl.c_str(),
+                                 crl.length() + 1);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -46,10 +46,10 @@ result_t X509Crl::load(Buffer_base *derCrl)
 
 result_t X509Crl::load(const char *pemCrl)
 {
-    int ret;
+    int32_t ret;
 
-    ret = x509_crl_parse(&m_crl, (const unsigned char *)pemCrl,
-                         qstrlen(pemCrl));
+    ret = mbedtls_x509_crl_parse(&m_crl, (const unsigned char *)pemCrl,
+                                 qstrlen(pemCrl) + 1);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -60,14 +60,14 @@ result_t X509Crl::loadFile(const char *filename)
 {
     result_t hr;
     std::string data;
-    int ret;
+    int32_t ret;
 
     hr = fs_base::ac_readFile(filename, data);
     if (hr < 0)
         return hr;
 
-    ret = x509_crl_parse(&m_crl, (const unsigned char *)data.c_str(),
-                         data.length());
+    ret = mbedtls_x509_crl_parse(&m_crl, (const unsigned char *)data.c_str(),
+                                 data.length() + 1);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -79,11 +79,11 @@ result_t X509Crl::loadFile(const char *filename)
 
 result_t X509Crl::dump(v8::Local<v8::Array> &retVal)
 {
-    Isolate &isolate = Isolate::now();
-    retVal = v8::Array::New(isolate.isolate);
+    Isolate* isolate = Isolate::now();
+    retVal = v8::Array::New(isolate->m_isolate);
 
-    const x509_crl *pCrl = &m_crl;
-    int ret, n = 0;
+    const mbedtls_x509_crl *pCrl = &m_crl;
+    int32_t ret, n = 0;
     std::string buf;
     size_t olen;
 
@@ -92,14 +92,14 @@ result_t X509Crl::dump(v8::Local<v8::Array> &retVal)
         if (pCrl->raw.len > 0)
         {
             buf.resize(pCrl->raw.len * 2 + 64);
-            ret = pem_write_buffer(PEM_BEGIN_CRL, PEM_END_CRL,
-                                   pCrl->raw.p, pCrl->raw.len,
-                                   (unsigned char *)&buf[0], buf.length(), &olen);
+            ret = mbedtls_pem_write_buffer(PEM_BEGIN_CRL, PEM_END_CRL,
+                                           pCrl->raw.p, pCrl->raw.len,
+                                           (unsigned char *)&buf[0], buf.length(), &olen);
             if (ret != 0)
                 return CHECK_ERROR(_ssl::setError(ret));
 
-            retVal->Set(n ++, v8::String::NewFromUtf8(isolate.isolate, buf.c_str(),
-                        v8::String::kNormalString, (int) olen - 1));
+            retVal->Set(n ++, v8::String::NewFromUtf8(isolate->m_isolate, buf.c_str(),
+                        v8::String::kNormalString, (int32_t) olen - 1));
         }
         pCrl = pCrl->next;
     }
@@ -109,8 +109,8 @@ result_t X509Crl::dump(v8::Local<v8::Array> &retVal)
 
 result_t X509Crl::clear()
 {
-    x509_crl_free(&m_crl);
-    x509_crl_init(&m_crl);
+    mbedtls_x509_crl_free(&m_crl);
+    mbedtls_x509_crl_init(&m_crl);
     return 0;
 }
 

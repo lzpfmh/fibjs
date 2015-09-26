@@ -73,13 +73,13 @@ result_t SslServer::create(X509Cert_base *crt, PKey_base *key, const char *addr,
         return hr;
 
     v8::Local<v8::Object> o = wrap();
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     m_handler = _handler;
-    o->SetHiddenValue(v8::String::NewFromUtf8(isolate.isolate, "handler"), _handler->wrap());
+    o->SetHiddenValue(v8::String::NewFromUtf8(isolate->m_isolate, "handler"), _handler->wrap());
 
     m_server = _server;
-    o->SetHiddenValue(v8::String::NewFromUtf8(isolate.isolate, "server"), _server->wrap());
+    o->SetHiddenValue(v8::String::NewFromUtf8(isolate->m_isolate, "server"), _server->wrap());
 
     return 0;
 }
@@ -100,18 +100,18 @@ result_t SslServer::create(v8::Local<v8::Array> certs, const char *addr, int32_t
         return hr;
 
     v8::Local<v8::Object> o = wrap();
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     m_handler = _handler;
-    o->SetHiddenValue(v8::String::NewFromUtf8(isolate.isolate, "handler"), _handler->wrap());
+    o->SetHiddenValue(v8::String::NewFromUtf8(isolate->m_isolate, "handler"), _handler->wrap());
 
     m_server = _server;
-    o->SetHiddenValue(v8::String::NewFromUtf8(isolate.isolate, "server"), _server->wrap());
+    o->SetHiddenValue(v8::String::NewFromUtf8(isolate->m_isolate, "server"), _server->wrap());
 
     return 0;
 }
 
-result_t SslServer::run(exlib::AsyncEvent *ac)
+result_t SslServer::run(AsyncEvent *ac)
 {
     return m_server->run(ac);
 }
@@ -121,7 +121,7 @@ result_t SslServer::asyncRun()
     return m_server->asyncRun();
 }
 
-result_t SslServer::stop(exlib::AsyncEvent *ac)
+result_t SslServer::stop(AsyncEvent *ac)
 {
     return m_server->stop(ac);
 }

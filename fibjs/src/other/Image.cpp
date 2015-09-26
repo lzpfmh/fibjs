@@ -5,6 +5,7 @@
  *      Author: lion
  */
 
+#include "utils.h"
 #include "Image.h"
 #include "Buffer.h"
 #include "ifs/fs.h"
@@ -15,26 +16,26 @@
 namespace fibjs
 {
 
-void Image::setExtMemory(int add)
+void Image::setExtMemory(int32_t add)
 {
     if (m_image)
     {
-        int psize =
-            gdImageTrueColor(m_image) ? sizeof(int) : sizeof(unsigned char);
-        int sx = gdImageSX(m_image);
-        int sy = gdImageSY(m_image);
+        int32_t psize =
+            gdImageTrueColor(m_image) ? sizeof(int32_t) : sizeof(unsigned char);
+        int32_t sx = gdImageSX(m_image);
+        int32_t sy = gdImageSY(m_image);
         extMemory(
             (sizeof(gdImage) + sizeof(void *) * sy + psize * sx * sy) * add);
     }
 }
 
 result_t gd_base::create(int32_t width, int32_t height, int32_t color,
-                         obj_ptr<Image_base> &retVal, exlib::AsyncEvent *ac)
+                         obj_ptr<Image_base> &retVal, AsyncEvent *ac)
 {
     if (width <= 0 || height <= 0)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     obj_ptr<Image> img = new Image();
@@ -47,9 +48,9 @@ result_t gd_base::create(int32_t width, int32_t height, int32_t color,
 }
 
 result_t gd_base::load(Buffer_base *data, obj_ptr<Image_base> &retVal,
-                       exlib::AsyncEvent *ac)
+                       AsyncEvent *ac)
 {
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     obj_ptr<Image> img = new Image();
@@ -62,19 +63,19 @@ result_t gd_base::load(Buffer_base *data, obj_ptr<Image_base> &retVal,
 }
 
 result_t gd_base::load(SeekableStream_base *stm, obj_ptr<Image_base> &retVal,
-                       exlib::AsyncEvent *ac)
+                       AsyncEvent *ac)
 {
-    class asyncLoad: public asyncState
+    class asyncLoad: public AsyncState
     {
     public:
         asyncLoad(SeekableStream_base *stm, obj_ptr<Image_base> &retVal,
-                  exlib::AsyncEvent *ac) :
-            asyncState(ac), m_stm(stm), m_retVal(retVal)
+                  AsyncEvent *ac) :
+            AsyncState(ac), m_stm(stm), m_retVal(retVal)
         {
             set(read);
         }
 
-        static int read(asyncState *pState, int n)
+        static int32_t read(AsyncState *pState, int32_t n)
         {
             asyncLoad *pThis = (asyncLoad *) pState;
             result_t hr;
@@ -92,7 +93,7 @@ result_t gd_base::load(SeekableStream_base *stm, obj_ptr<Image_base> &retVal,
             return pThis->m_stm->read((int32_t) len, pThis->m_buffer, pThis);
         }
 
-        static int load(asyncState *pState, int n)
+        static int32_t load(AsyncState *pState, int32_t n)
         {
             asyncLoad *pThis = (asyncLoad *) pState;
 
@@ -121,19 +122,19 @@ result_t gd_base::load(SeekableStream_base *stm, obj_ptr<Image_base> &retVal,
 }
 
 result_t gd_base::load(const char *fname, obj_ptr<Image_base> &retVal,
-                       exlib::AsyncEvent *ac)
+                       AsyncEvent *ac)
 {
-    class asyncLoad: public asyncState
+    class asyncLoad: public AsyncState
     {
     public:
         asyncLoad(const char *fname, obj_ptr<Image_base> &retVal,
-                  exlib::AsyncEvent *ac) :
-            asyncState(ac), m_fname(fname), m_retVal(retVal)
+                  AsyncEvent *ac) :
+            AsyncState(ac), m_fname(fname), m_retVal(retVal)
         {
             set(open);
         }
 
-        static int open(asyncState *pState, int n)
+        static int32_t open(AsyncState *pState, int32_t n)
         {
             asyncLoad *pThis = (asyncLoad *) pState;
 
@@ -141,7 +142,7 @@ result_t gd_base::load(const char *fname, obj_ptr<Image_base> &retVal,
             return fs_base::open(pThis->m_fname.c_str(), "r", pThis->m_file, pThis);
         }
 
-        static int read(asyncState *pState, int n)
+        static int32_t read(AsyncState *pState, int32_t n)
         {
             asyncLoad *pThis = (asyncLoad *) pState;
 
@@ -149,7 +150,7 @@ result_t gd_base::load(const char *fname, obj_ptr<Image_base> &retVal,
             return load(pThis->m_file, pThis->m_retVal, pThis);
         }
 
-        static int close(asyncState *pState, int n)
+        static int32_t close(AsyncState *pState, int32_t n)
         {
             asyncLoad *pThis = (asyncLoad *) pState;
 
@@ -163,7 +164,7 @@ result_t gd_base::load(const char *fname, obj_ptr<Image_base> &retVal,
         obj_ptr<Image_base> &m_retVal;
     };
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     return (new asyncLoad(fname, retVal, ac))->post(0);
@@ -186,7 +187,7 @@ result_t gd_base::rgba(int32_t red, int32_t green, int32_t blue,
             || blue > 255 || alpha < 0 || alpha > 1)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    retVal = gdTrueColorAlpha(red, green, blue, (int32_t)(alpha * 127));
+    retVal = gdTrueColorAlpha(red, green, blue, doubleToInt(alpha * 127));
     return 0;
 }
 
@@ -199,15 +200,15 @@ inline int32_t rgb_quant(double p, double q, double h)
         h -= 360;
 
     if (h < 60)
-        return (int32_t)((p + (q - p) * h / 60) * 255 + .5);
+        return doubleToInt((p + (q - p) * h / 60) * 255);
 
     if (h < 180)
-        return (int32_t)(q * 255 + .5);
+        return doubleToInt(q * 255 );
 
     if (h < 240)
-        return (int32_t)((p + (q - p) * (240 - h) / 60) * 255 + .5);
+        return doubleToInt((p + (q - p) * (240 - h) / 60) * 255);
 
-    return (int32_t)(p * 255 + .5);
+    return doubleToInt(p * 255);
 }
 
 inline int32_t hsl2rgb(double h, double s, double l)
@@ -216,7 +217,7 @@ inline int32_t hsl2rgb(double h, double s, double l)
 
     if (s == 0)
     {
-        int32_t c = (int32_t)(l * 255);
+        int32_t c = doubleToInt(l * 255);
         return gdTrueColor(c, c, c);
     }
 
@@ -253,7 +254,77 @@ result_t gd_base::hsla(double hue, double saturation, double lightness,
             || lightness > 1 || alpha < 0 || alpha > 1)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    retVal = ((int32_t)(alpha * 127) << 24) | hsl2rgb(hue, saturation, lightness);
+    retVal = (doubleToInt(alpha * 127) << 24) | hsl2rgb(hue, saturation, lightness);
+    return 0;
+}
+
+inline int32_t hsb2rgb(double h, double s, double b)
+{
+    double cr = 0, cg = 0, cb = 0;
+    int32_t i = doubleToInt(h / 60) % 6;
+    double f = (h / 60) - i;
+    double p = b * (1 - s);
+    double q = b * (1 - f * s);
+    double t = b * (1 - (1 - f) * s);
+
+    switch (i) {
+    case 0:
+        cr = b;
+        cg = t;
+        cb = p;
+        break;
+    case 1:
+        cr = q;
+        cg = b;
+        cb = p;
+        break;
+    case 2:
+        cr = p;
+        cg = b;
+        cb = t;
+        break;
+    case 3:
+        cr = p;
+        cg = q;
+        cb = b;
+        break;
+    case 4:
+        cr = t;
+        cg = p;
+        cb = b;
+        break;
+    case 5:
+        cr = b;
+        cg = p;
+        cb = q;
+        break;
+    default:
+        break;
+    }
+
+    return gdTrueColor(doubleToInt (cr * 255.0),
+                       doubleToInt (cg * 255.0),
+                       doubleToInt (cb * 255.0));
+}
+
+result_t gd_base::hsb(double hue, double saturation, double brightness, int32_t& retVal)
+{
+    if (hue < 0 || hue > 360 || saturation < 0 || saturation > 1 || brightness < 0
+            || brightness > 1)
+        return CHECK_ERROR(CALL_E_INVALIDARG);
+
+    retVal = hsb2rgb(hue, saturation, brightness);
+    return 0;
+}
+
+result_t gd_base::hsba(double hue, double saturation, double brightness,
+                       double alpha, int32_t& retVal)
+{
+    if (hue < 0 || hue > 360 || saturation < 0 || saturation > 1 || brightness < 0
+            || brightness > 1 || alpha < 0 || alpha > 1)
+        return CHECK_ERROR(CALL_E_INVALIDARG);
+
+    retVal = (doubleToInt(alpha * 127) << 24) | hsb2rgb(hue, saturation, brightness);
     return 0;
 }
 
@@ -335,21 +406,21 @@ result_t Image::load(Buffer_base *data)
     switch (format)
     {
     case gd_base::_GIF:
-        m_image = gdImageCreateFromGifPtr((int) strBuf.length(),
+        m_image = gdImageCreateFromGifPtr((int32_t) strBuf.length(),
                                           (void *) strBuf.c_str());
         break;
     case gd_base::_PNG:
-        m_image = gdImageCreateFromPngPtr((int) strBuf.length(),
+        m_image = gdImageCreateFromPngPtr((int32_t) strBuf.length(),
                                           (void *) strBuf.c_str());
         break;
     case gd_base::_JPEG:
-        m_image = gdImageCreateFromJpegPtr((int) strBuf.length(),
+        m_image = gdImageCreateFromJpegPtr((int32_t) strBuf.length(),
                                            (void *) strBuf.c_str());
         if (m_image != NULL)
         {
             EXIFInfo result;
             result.parseFrom((const unsigned char *) strBuf.c_str(),
-                             (unsigned int)strBuf.length());
+                             (uint32_t)strBuf.length());
 
             switch (result.Orientation)
             {
@@ -377,19 +448,19 @@ result_t Image::load(Buffer_base *data)
 
         break;
     case gd_base::_TIFF:
-        m_image = gdImageCreateFromTiffPtr((int) strBuf.length(),
+        m_image = gdImageCreateFromTiffPtr((int32_t) strBuf.length(),
                                            (void *) strBuf.c_str());
         break;
     case gd_base::_BMP:
-        m_image = gdImageCreateFromBmpPtr((int) strBuf.length(),
+        m_image = gdImageCreateFromBmpPtr((int32_t) strBuf.length(),
                                           (void *) strBuf.c_str());
         break;
     case gd_base::_GD:
-        m_image = gdImageCreateFromGdPtr((int) strBuf.length(),
+        m_image = gdImageCreateFromGdPtr((int32_t) strBuf.length(),
                                          (void *) strBuf.c_str());
         break;
     case gd_base::_GD2:
-        m_image = gdImageCreateFromGd2Ptr((int) strBuf.length(),
+        m_image = gdImageCreateFromGd2Ptr((int32_t) strBuf.length(),
                                           (void *) strBuf.c_str());
         break;
     }
@@ -403,7 +474,7 @@ result_t Image::load(Buffer_base *data)
     return 0;
 }
 
-int my_replacer(gdImagePtr im, int src)
+int32_t my_replacer(gdImagePtr im, int32_t src)
 {
     if (src == gdImageGetTransparent(im))
         return gdTrueColor(255, 255, 255);
@@ -412,15 +483,15 @@ int my_replacer(gdImagePtr im, int src)
 }
 
 result_t Image::getData(int32_t format, int32_t quality,
-                        obj_ptr<Buffer_base> &retVal, exlib::AsyncEvent *ac)
+                        obj_ptr<Buffer_base> &retVal, AsyncEvent *ac)
 {
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
-    int size = 0;
+    int32_t size = 0;
     void *data = NULL;
 
     if (format == gd_base::_JPEG || format == gd_base::_TIFF
@@ -447,7 +518,7 @@ result_t Image::getData(int32_t format, int32_t quality,
     case gd_base::_JPEG:
     {
         unsigned char *ed_data = NULL;
-        unsigned int  ed_size = 0;
+        uint32_t  ed_size = 0;
 
         data = gdImageJpegPtr(m_image, &size, quality, ed_data, ed_size);
 
@@ -479,19 +550,19 @@ result_t Image::getData(int32_t format, int32_t quality,
 }
 
 result_t Image::save(Stream_base *stm, int32_t format, int32_t quality,
-                     exlib::AsyncEvent *ac)
+                     AsyncEvent *ac)
 {
-    class asyncSave: public asyncState
+    class asyncSave: public AsyncState
     {
     public:
         asyncSave(Image *img, Stream_base *stm, int32_t format, int32_t quality,
-                  exlib::AsyncEvent *ac) :
-            asyncState(ac), m_pThis(img), m_stm(stm), m_format(format), m_quality(quality)
+                  AsyncEvent *ac) :
+            AsyncState(ac), m_pThis(img), m_stm(stm), m_format(format), m_quality(quality)
         {
             set(getData);
         }
 
-        static int getData(asyncState *pState, int n)
+        static int32_t getData(AsyncState *pState, int32_t n)
         {
             asyncSave *pThis = (asyncSave *) pState;
 
@@ -499,7 +570,7 @@ result_t Image::save(Stream_base *stm, int32_t format, int32_t quality,
             return pThis->m_pThis->getData(pThis->m_format, pThis->m_quality, pThis->m_buf, pThis);
         }
 
-        static int save(asyncState *pState, int n)
+        static int32_t save(AsyncState *pState, int32_t n)
         {
             asyncSave *pThis = (asyncSave *) pState;
 
@@ -525,19 +596,19 @@ result_t Image::save(Stream_base *stm, int32_t format, int32_t quality,
 }
 
 result_t Image::save(const char *fname, int32_t format, int32_t quality,
-                     exlib::AsyncEvent *ac)
+                     AsyncEvent *ac)
 {
-    class asyncSave: public asyncState
+    class asyncSave: public AsyncState
     {
     public:
         asyncSave(Image *img, const char *fname, int32_t format, int32_t quality,
-                  exlib::AsyncEvent *ac) :
-            asyncState(ac), m_pThis(img), m_fname(fname), m_format(format), m_quality(quality)
+                  AsyncEvent *ac) :
+            AsyncState(ac), m_pThis(img), m_fname(fname), m_format(format), m_quality(quality)
         {
             set(open);
         }
 
-        static int open(asyncState *pState, int n)
+        static int32_t open(AsyncState *pState, int32_t n)
         {
             asyncSave *pThis = (asyncSave *) pState;
 
@@ -545,7 +616,7 @@ result_t Image::save(const char *fname, int32_t format, int32_t quality,
             return fs_base::open(pThis->m_fname.c_str(), "w", pThis->m_file, pThis);
         }
 
-        static int save(asyncState *pState, int n)
+        static int32_t save(AsyncState *pState, int32_t n)
         {
             asyncSave *pThis = (asyncSave *) pState;
 
@@ -553,7 +624,7 @@ result_t Image::save(const char *fname, int32_t format, int32_t quality,
             return pThis->m_pThis->save(pThis->m_file, pThis->m_format, pThis->m_quality, pThis);
         }
 
-        static int close(asyncState *pState, int n)
+        static int32_t close(AsyncState *pState, int32_t n)
         {
             asyncSave *pThis = (asyncSave *) pState;
 
@@ -573,7 +644,7 @@ result_t Image::save(const char *fname, int32_t format, int32_t quality,
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     return (new asyncSave(this, fname, format, quality, ac))->post(0);
@@ -654,7 +725,7 @@ result_t Image::colorAllocateAlpha(int32_t red, int32_t green, int32_t blue,
             || blue > 255 || alpha < 0 || alpha > 1)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    retVal = gdImageColorAllocateAlpha(m_image, red, green, blue, (int32_t)(alpha * 127));
+    retVal = gdImageColorAllocateAlpha(m_image, red, green, blue, doubleToInt(alpha * 127));
     return 0;
 }
 
@@ -712,7 +783,7 @@ result_t Image::colorClosestAlpha(int32_t red, int32_t green, int32_t blue,
             || blue > 255 || alpha < 0 || alpha > 1)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    retVal = gdImageColorClosestAlpha(m_image, red, green, blue, (int32_t)(alpha * 127));
+    retVal = gdImageColorClosestAlpha(m_image, red, green, blue, doubleToInt(alpha * 127));
     return 0;
 }
 
@@ -751,7 +822,7 @@ result_t Image::colorExactAlpha(int32_t red, int32_t green, int32_t blue,
             || blue > 255 || alpha < 0 || alpha > 1)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    retVal = gdImageColorExactAlpha(m_image, red, green, blue, (int32_t)(alpha * 127));
+    retVal = gdImageColorExactAlpha(m_image, red, green, blue, doubleToInt(alpha * 127));
     return 0;
 }
 
@@ -790,7 +861,7 @@ result_t Image::colorResolveAlpha(int32_t red, int32_t green, int32_t blue,
             || blue > 255 || alpha < 0 || alpha > 1)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    retVal = gdImageColorResolveAlpha(m_image, red, green, blue, (int32_t)(alpha * 127));
+    retVal = gdImageColorResolveAlpha(m_image, red, green, blue, doubleToInt(alpha * 127));
     return 0;
 }
 
@@ -860,6 +931,24 @@ result_t Image::set_transparent(int32_t newVal)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
     gdImageColorTransparent(m_image, newVal);
+    return 0;
+}
+
+result_t Image::get_progressive(bool& retVal)
+{
+    if (!m_image)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
+    retVal = gdImageGetInterlaced(m_image) != 0;
+    return 0;
+}
+
+result_t Image::set_progressive(bool newVal)
+{
+    if (!m_image)
+        return CHECK_ERROR(CALL_E_INVALID_CALL);
+
+    gdImageInterlace(m_image, newVal);
     return 0;
 }
 
@@ -956,7 +1045,7 @@ result_t Image::polygon(v8::Local<v8::Array> points, int32_t color)
     if (hr < 0)
         return hr;
 
-    gdImagePolygon(m_image, pts.data(), (int) pts.size(), color);
+    gdImagePolygon(m_image, pts.data(), (int32_t) pts.size(), color);
     return 0;
 }
 
@@ -971,7 +1060,7 @@ result_t Image::openPolygon(v8::Local<v8::Array> points, int32_t color)
     if (hr < 0)
         return hr;
 
-    gdImageOpenPolygon(m_image, pts.data(), (int) pts.size(), color);
+    gdImageOpenPolygon(m_image, pts.data(), (int32_t) pts.size(), color);
     return 0;
 }
 
@@ -986,7 +1075,7 @@ result_t Image::filledPolygon(v8::Local<v8::Array> points, int32_t color)
     if (hr < 0)
         return hr;
 
-    gdImageFilledPolygon(m_image, pts.data(), (int) pts.size(), color);
+    gdImageFilledPolygon(m_image, pts.data(), (int32_t) pts.size(), color);
     return 0;
 }
 
@@ -1088,12 +1177,12 @@ result_t Image::New(int32_t width, int32_t height, obj_ptr<Image> &retVal)
     return 0;
 }
 
-result_t Image::colorReplace(int32_t src, int32_t dst, exlib::AsyncEvent *ac)
+result_t Image::colorReplace(int32_t src, int32_t dst, AsyncEvent *ac)
 {
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     gdImageColorReplace(m_image, src, dst);
@@ -1101,7 +1190,7 @@ result_t Image::colorReplace(int32_t src, int32_t dst, exlib::AsyncEvent *ac)
 }
 
 result_t Image::crop(int32_t x, int32_t y, int32_t width, int32_t height,
-                     obj_ptr<Image_base> &retVal, exlib::AsyncEvent *ac)
+                     obj_ptr<Image_base> &retVal, AsyncEvent *ac)
 {
     if (width <= 0 || height <= 0)
         return CHECK_ERROR(CALL_E_INVALIDARG);
@@ -1109,7 +1198,7 @@ result_t Image::crop(int32_t x, int32_t y, int32_t width, int32_t height,
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     obj_ptr<Image> dst;
@@ -1126,12 +1215,12 @@ result_t Image::crop(int32_t x, int32_t y, int32_t width, int32_t height,
     return 0;
 }
 
-result_t Image::clone(obj_ptr<Image_base> &retVal, exlib::AsyncEvent *ac)
+result_t Image::clone(obj_ptr<Image_base> &retVal, AsyncEvent *ac)
 {
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     int32_t w = gdImageSX(m_image);
@@ -1141,7 +1230,7 @@ result_t Image::clone(obj_ptr<Image_base> &retVal, exlib::AsyncEvent *ac)
 }
 
 result_t Image::resample(int32_t width, int32_t height,
-                         obj_ptr<Image_base> &retVal, exlib::AsyncEvent *ac)
+                         obj_ptr<Image_base> &retVal, AsyncEvent *ac)
 {
     if (width <= 0 || height <= 0)
         return CHECK_ERROR(CALL_E_INVALIDARG);
@@ -1149,7 +1238,7 @@ result_t Image::resample(int32_t width, int32_t height,
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     obj_ptr<Image> dst;
@@ -1166,12 +1255,12 @@ result_t Image::resample(int32_t width, int32_t height,
     return 0;
 }
 
-result_t Image::flip(int32_t dir, exlib::AsyncEvent *ac)
+result_t Image::flip(int32_t dir, AsyncEvent *ac)
 {
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     if (dir == gd_base::_HORIZONTAL)
@@ -1191,9 +1280,9 @@ result_t Image::rotate(int32_t dir)
     if (dir != gd_base::_LEFT && dir != gd_base::_RIGHT)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    int sx = gdImageSX(m_image);
-    int sy = gdImageSY(m_image);
-    int i, j;
+    int32_t sx = gdImageSX(m_image);
+    int32_t sy = gdImageSY(m_image);
+    int32_t i, j;
     gdImagePtr newImage;
 
     if (gdImageTrueColor(m_image))
@@ -1227,23 +1316,23 @@ result_t Image::rotate(int32_t dir)
     return 0;
 }
 
-result_t Image::rotate(int32_t dir, exlib::AsyncEvent *ac)
+result_t Image::rotate(int32_t dir, AsyncEvent *ac)
 {
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     return rotate(dir);
 }
 
-result_t Image::convert(int32_t color, exlib::AsyncEvent *ac)
+result_t Image::convert(int32_t color, AsyncEvent *ac)
 {
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     if (color != gd_base::_TRUECOLOR && color != gd_base::_PALETTE)
@@ -1251,10 +1340,10 @@ result_t Image::convert(int32_t color, exlib::AsyncEvent *ac)
 
     if (color == gd_base::_TRUECOLOR && !gdImageTrueColor(m_image))
     {
-        int sx = gdImageSX(m_image);
-        int sy = gdImageSY(m_image);
+        int32_t sx = gdImageSX(m_image);
+        int32_t sy = gdImageSY(m_image);
         gdImagePtr newImage = gdImageCreateTrueColor(sx, sy);
-        int trans = gdImageGetTransparent(m_image);
+        int32_t trans = gdImageGetTransparent(m_image);
 
         if (trans != -1)
         {
@@ -1285,7 +1374,7 @@ result_t Image::convert(int32_t color, exlib::AsyncEvent *ac)
 
 result_t Image::copy(Image_base *source, int32_t dstX, int32_t dstY,
                      int32_t srcX, int32_t srcY, int32_t width, int32_t height,
-                     exlib::AsyncEvent *ac)
+                     AsyncEvent *ac)
 {
     if (width <= 0 || height <= 0)
         return CHECK_ERROR(CALL_E_INVALIDARG);
@@ -1293,7 +1382,7 @@ result_t Image::copy(Image_base *source, int32_t dstX, int32_t dstY,
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     Image *src = (Image *) source;
@@ -1306,7 +1395,7 @@ result_t Image::copy(Image_base *source, int32_t dstX, int32_t dstY,
 
 result_t Image::copyMerge(Image_base *source, int32_t dstX, int32_t dstY,
                           int32_t srcX, int32_t srcY, int32_t width, int32_t height,
-                          int32_t percent, exlib::AsyncEvent *ac)
+                          int32_t percent, AsyncEvent *ac)
 {
     if (width <= 0 || height <= 0)
         return CHECK_ERROR(CALL_E_INVALIDARG);
@@ -1314,7 +1403,7 @@ result_t Image::copyMerge(Image_base *source, int32_t dstX, int32_t dstY,
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     Image *src = (Image *) source;
@@ -1328,7 +1417,7 @@ result_t Image::copyMerge(Image_base *source, int32_t dstX, int32_t dstY,
 
 result_t Image::copyMergeGray(Image_base *source, int32_t dstX, int32_t dstY,
                               int32_t srcX, int32_t srcY, int32_t width, int32_t height,
-                              int32_t percent, exlib::AsyncEvent *ac)
+                              int32_t percent, AsyncEvent *ac)
 {
     if (width <= 0 || height <= 0)
         return CHECK_ERROR(CALL_E_INVALIDARG);
@@ -1336,7 +1425,7 @@ result_t Image::copyMergeGray(Image_base *source, int32_t dstX, int32_t dstY,
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     Image *src = (Image *) source;
@@ -1350,12 +1439,12 @@ result_t Image::copyMergeGray(Image_base *source, int32_t dstX, int32_t dstY,
 
 result_t Image::copyResized(Image_base *source, int32_t dstX, int32_t dstY,
                             int32_t srcX, int32_t srcY, int32_t dstW, int32_t dstH, int32_t srcW,
-                            int32_t srcH, exlib::AsyncEvent *ac)
+                            int32_t srcH, AsyncEvent *ac)
 {
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     Image *src = (Image *) source;
@@ -1369,12 +1458,12 @@ result_t Image::copyResized(Image_base *source, int32_t dstX, int32_t dstY,
 
 result_t Image::copyResampled(Image_base *source, int32_t dstX, int32_t dstY,
                               int32_t srcX, int32_t srcY, int32_t dstW, int32_t dstH, int32_t srcW,
-                              int32_t srcH, exlib::AsyncEvent *ac)
+                              int32_t srcH, AsyncEvent *ac)
 {
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     Image *src = (Image *) source;
@@ -1388,7 +1477,7 @@ result_t Image::copyResampled(Image_base *source, int32_t dstX, int32_t dstY,
 
 result_t Image::copyRotated(Image_base *source, double dstX, double dstY,
                             int32_t srcX, int32_t srcY, int32_t width, int32_t height,
-                            int32_t angle, exlib::AsyncEvent *ac)
+                            double angle, AsyncEvent *ac)
 {
     if (width <= 0 || height <= 0)
         return CHECK_ERROR(CALL_E_INVALIDARG);
@@ -1396,7 +1485,7 @@ result_t Image::copyRotated(Image_base *source, double dstX, double dstY,
     if (!m_image)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    if (switchToAsync(ac))
+    if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
     Image *src = (Image *) source;

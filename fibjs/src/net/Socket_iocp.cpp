@@ -20,7 +20,7 @@ namespace fibjs
 
 void setOption(SOCKET s)
 {
-    int keepAlive = 1;
+    int32_t keepAlive = 1;
     setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (const char *) &keepAlive,
                sizeof(keepAlive));
 
@@ -31,7 +31,7 @@ void setOption(SOCKET s)
     WSAIoctl(s, SIO_KEEPALIVE_VALS, &Settings, sizeof(Settings), NULL, 0,
              &dwBytes, NULL, NULL);
 
-    int noDelay = 1;
+    int32_t noDelay = 1;
 
     setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char *) &noDelay,
                sizeof(noDelay));
@@ -42,7 +42,7 @@ HANDLE s_hIocp;
 class asyncProc: public OVERLAPPED
 {
 public:
-    asyncProc(SOCKET s, exlib::AsyncEvent *ac, int32_t &guard) :
+    asyncProc(SOCKET s, AsyncEvent *ac, intptr_t &guard) :
         m_s(s), m_ac(ac), m_guard(guard), m_next(NULL)
     {
         memset((OVERLAPPED *) this, 0, sizeof(OVERLAPPED));
@@ -64,7 +64,7 @@ public:
         return 0;
     }
 
-    virtual void ready(DWORD dwBytes, int nError)
+    virtual void ready(DWORD dwBytes, int32_t nError)
     {
         m_guard = 0;
         m_ac->apost(nError);
@@ -73,8 +73,8 @@ public:
 
 public:
     SOCKET m_s;
-    exlib::AsyncEvent *m_ac;
-    int32_t &m_guard;
+    AsyncEvent *m_ac;
+    intptr_t &m_guard;
     asyncProc *m_next;
 };
 
@@ -84,7 +84,7 @@ public:
     _acSocket()
     {
         WSADATA wsaData;
-        int iResult;
+        int32_t iResult;
 
         iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
         if (iResult != 0)
@@ -94,12 +94,11 @@ public:
         }
 
         s_hIocp = ::CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, 0);
-        start();
     }
 
     virtual void Run()
     {
-        int bRet;
+        int32_t bRet;
         ULONG_PTR v;
         DWORD dwBytes, dwError;
         LPOVERLAPPED pOverlap;
@@ -123,11 +122,16 @@ public:
                 dwError = 0;
 
             if (bRet || (dwError != WAIT_TIMEOUT))
-                ((asyncProc *) pOverlap)->ready(dwBytes, -(int) dwError);
+                ((asyncProc *) pOverlap)->ready(dwBytes, -(int32_t) dwError);
         }
     }
 
 } s_acSock;
+
+void init_net()
+{
+    s_acSock.start();
+}
 
 result_t net_base::backend(std::string &retVal)
 {
@@ -135,12 +139,12 @@ result_t net_base::backend(std::string &retVal)
     return 0;
 }
 
-result_t Socket::connect(const char *host, int32_t port, exlib::AsyncEvent *ac)
+result_t Socket::connect(const char *host, int32_t port, AsyncEvent *ac)
 {
     class asyncConnect: public asyncProc
     {
     public:
-        asyncConnect(SOCKET s, inetAddr &ai, exlib::AsyncEvent *ac, int32_t &guard) :
+        asyncConnect(SOCKET s, inetAddr &ai, AsyncEvent *ac, intptr_t &guard) :
             asyncProc(s, ac, guard), m_ai(ai)
         {
         }
@@ -148,7 +152,7 @@ result_t Socket::connect(const char *host, int32_t port, exlib::AsyncEvent *ac)
         virtual result_t process()
         {
             static LPFN_CONNECTEX ConnectEx;
-            int nError;
+            int32_t nError;
 
             if (!ConnectEx)
             {
@@ -163,7 +167,7 @@ result_t Socket::connect(const char *host, int32_t port, exlib::AsyncEvent *ac)
                     return CHECK_ERROR(SocketError());
             }
 
-            if (ConnectEx(m_s, (sockaddr *) &m_ai, (int) m_ai.size(), NULL, 0,
+            if (ConnectEx(m_s, (sockaddr *) &m_ai, (int32_t) m_ai.size(), NULL, 0,
                           NULL, this))
                 return CHECK_ERROR(CALL_E_PENDDING);
 
@@ -171,7 +175,7 @@ result_t Socket::connect(const char *host, int32_t port, exlib::AsyncEvent *ac)
             return CHECK_ERROR((nError == WSA_IO_PENDING) ? CALL_E_PENDDING : -nError);
         }
 
-        virtual void ready(DWORD dwBytes, int nError)
+        virtual void ready(DWORD dwBytes, int32_t nError)
         {
             if (!nError)
             {
@@ -221,13 +225,13 @@ result_t Socket::connect(const char *host, int32_t port, exlib::AsyncEvent *ac)
     return CHECK_ERROR(CALL_E_PENDDING);
 }
 
-result_t Socket::accept(obj_ptr<Socket_base> &retVal, exlib::AsyncEvent *ac)
+result_t Socket::accept(obj_ptr<Socket_base> &retVal, AsyncEvent *ac)
 {
     class asyncAccept: public asyncProc
     {
     public:
         asyncAccept(SOCKET s, SOCKET sListen, obj_ptr<Socket_base> &retVal,
-                    exlib::AsyncEvent *ac, int32_t &guard) :
+                    AsyncEvent *ac, intptr_t &guard) :
             asyncProc(s, ac, guard), m_sListen(sListen), m_retVal(retVal)
         {
         }
@@ -235,7 +239,7 @@ result_t Socket::accept(obj_ptr<Socket_base> &retVal, exlib::AsyncEvent *ac)
         virtual result_t process()
         {
             static LPFN_ACCEPTEX AcceptEx;
-            int nError;
+            int32_t nError;
 
             if (!AcceptEx)
             {
@@ -257,7 +261,7 @@ result_t Socket::accept(obj_ptr<Socket_base> &retVal, exlib::AsyncEvent *ac)
             return CHECK_ERROR((nError == ERROR_IO_PENDING) ? CALL_E_PENDDING : -nError);
         }
 
-        virtual void ready(DWORD dwBytes, int nError)
+        virtual void ready(DWORD dwBytes, int32_t nError)
         {
             if (!nError)
             {
@@ -301,13 +305,13 @@ result_t Socket::accept(obj_ptr<Socket_base> &retVal, exlib::AsyncEvent *ac)
 }
 
 result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                      exlib::AsyncEvent *ac, bool bRead)
+                      AsyncEvent *ac, bool bRead)
 {
     class asyncRecv: public asyncProc
     {
     public:
         asyncRecv(SOCKET s, int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                  exlib::AsyncEvent *ac, bool bRead, int32_t &guard) :
+                  AsyncEvent *ac, bool bRead, intptr_t &guard) :
             asyncProc(s, ac, guard), m_retVal(retVal), m_pos(0), m_bRead(bRead)
         {
             m_buf.resize(bytes > 0 ? bytes : STREAM_BUFF_SIZE);
@@ -315,7 +319,7 @@ result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
 
         virtual result_t process()
         {
-            int nError;
+            int32_t nError;
 
             if (ReadFile((HANDLE) m_s, &m_buf[m_pos],
                          (DWORD) m_buf.length() - m_pos, NULL, this))
@@ -329,7 +333,7 @@ result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
             return CHECK_ERROR((nError == ERROR_IO_PENDING) ? CALL_E_PENDDING : -nError);
         }
 
-        virtual void ready(DWORD dwBytes, int nError)
+        virtual void ready(DWORD dwBytes, int32_t nError)
         {
             if (nError == -ERROR_NETNAME_DELETED)
             {
@@ -344,7 +348,7 @@ result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
             {
                 m_pos += dwBytes;
 
-                if (m_bRead && m_pos < (int) m_buf.length())
+                if (m_bRead && m_pos < (int32_t) m_buf.length())
                 {
                     proc();
                     return;
@@ -364,7 +368,7 @@ result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
 
     public:
         obj_ptr<Buffer_base> &m_retVal;
-        int m_pos;
+        int32_t m_pos;
         bool m_bRead;
         std::string m_buf;
     };
@@ -382,22 +386,22 @@ result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
     return CHECK_ERROR(CALL_E_PENDDING);
 }
 
-result_t Socket::send(Buffer_base *data, exlib::AsyncEvent *ac)
+result_t Socket::send(Buffer_base *data, AsyncEvent *ac)
 {
     class asyncSend: public asyncProc
     {
     public:
-        asyncSend(SOCKET s, Buffer_base *data, exlib::AsyncEvent *ac, int32_t &guard) :
+        asyncSend(SOCKET s, Buffer_base *data, AsyncEvent *ac, intptr_t &guard) :
             asyncProc(s, ac, guard)
         {
             data->toString(m_buf);
             m_p = m_buf.c_str();
-            m_sz = (int) m_buf.length();
+            m_sz = (int32_t) m_buf.length();
         }
 
         virtual result_t process()
         {
-            int nError;
+            int32_t nError;
 
             if (WriteFile((HANDLE) m_s, (LPCSTR) m_p, m_sz, NULL, this))
                 return CHECK_ERROR(CALL_E_PENDDING);
@@ -406,7 +410,7 @@ result_t Socket::send(Buffer_base *data, exlib::AsyncEvent *ac)
             return CHECK_ERROR((nError == ERROR_IO_PENDING) ? CALL_E_PENDDING : -nError);
         }
 
-        virtual void ready(DWORD dwBytes, int nError)
+        virtual void ready(DWORD dwBytes, int32_t nError)
         {
             if (!nError)
             {
@@ -426,7 +430,7 @@ result_t Socket::send(Buffer_base *data, exlib::AsyncEvent *ac)
     public:
         std::string m_buf;
         const char *m_p;
-        int m_sz;
+        int32_t m_sz;
     };
 
     if (m_sock == INVALID_SOCKET)

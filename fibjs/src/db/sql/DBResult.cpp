@@ -26,6 +26,11 @@ result_t DBResult::_indexed_setter(uint32_t index, Variant newVal)
     return m_array._indexed_setter(index, newVal);
 }
 
+result_t DBResult::freeze()
+{
+    return m_array.freeze();
+}
+
 result_t DBResult::get_length(int32_t &retVal)
 {
     if (!m_size)
@@ -47,8 +52,7 @@ result_t DBResult::push(Variant v)
     if (!m_size)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    m_array.push(v);
-    return 0;
+    return m_array.push(v);
 }
 
 result_t DBResult::push(const v8::FunctionCallbackInfo<v8::Value> &args)
@@ -56,8 +60,7 @@ result_t DBResult::push(const v8::FunctionCallbackInfo<v8::Value> &args)
     if (!m_size)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    m_array.push(args);
-    return 0;
+    return m_array.push(args);
 }
 
 result_t DBResult::pop(Variant &retVal)
@@ -139,13 +142,13 @@ result_t DBResult::toJSON(const char *key, v8::Local<v8::Value> &retVal)
     if (m_size)
         return m_array.toJSON(key, retVal);
 
-    Isolate &isolate = Isolate::now();
-    v8::Local<v8::Object> o = v8::Object::New(isolate.isolate);
+    Isolate* isolate = Isolate::now();
+    v8::Local<v8::Object> o = v8::Object::New(isolate->m_isolate);
 
-    o->Set(v8::String::NewFromUtf8(isolate.isolate, "affected", v8::String::kNormalString, 8),
-           v8::Number::New(isolate.isolate, (double) m_affected));
-    o->Set(v8::String::NewFromUtf8(isolate.isolate, "insertId", v8::String::kNormalString, 8),
-           v8::Number::New(isolate.isolate, (double) m_insertId));
+    o->Set(v8::String::NewFromUtf8(isolate->m_isolate, "affected", v8::String::kNormalString, 8),
+           v8::Number::New(isolate->m_isolate, (double) m_affected));
+    o->Set(v8::String::NewFromUtf8(isolate->m_isolate, "insertId", v8::String::kNormalString, 8),
+           v8::Number::New(isolate->m_isolate, (double) m_insertId));
 
     retVal = o;
 
@@ -174,7 +177,8 @@ result_t DBResult::get_fields(v8::Local<v8::Array> &retVal)
 {
     if (!m_size)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
-
+    
+    m_fields->names(retVal);
     return 0;
 }
 

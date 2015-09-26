@@ -24,6 +24,7 @@ public:
     // ObjectArray_base
     virtual result_t _indexed_getter(uint32_t index, Variant &retVal);
     virtual result_t _indexed_setter(uint32_t index, Variant newVal);
+    virtual result_t freeze();
     virtual result_t get_length(int32_t &retVal);
     virtual result_t resize(int32_t sz);
     virtual result_t push(Variant v);
@@ -42,8 +43,13 @@ public:
     class array
     {
     public:
+        array(): m_freeze(false)
+        {}
+
+    public:
         result_t _indexed_getter(uint32_t index, Variant &retVal);
         result_t _indexed_setter(uint32_t index, Variant newVal);
+        result_t freeze();
         result_t get_length(int32_t &retVal);
         result_t resize(int32_t sz);
         result_t push(Variant v);
@@ -74,10 +80,11 @@ public:
 
     private:
         v8::Local<v8::Value> _call(v8::Local<v8::Function> func,
-                                   v8::Local<v8::Object> thisp, int i);
+                                   v8::Local<v8::Object> thisp, int32_t i);
 
     private:
         QuickArray<VariantEx> m_array;
+        bool m_freeze;
     };
 
 public:

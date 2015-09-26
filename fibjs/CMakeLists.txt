@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 2.6)
 
-include(../tools/arch.cmake)
-include(../tools/os.cmake)
-include(../tools/subdirs.cmake)
+include(tools/arch.cmake)
+include(tools/os.cmake)
+include(tools/subdirs.cmake)
 
 project(fibjs)
 
@@ -17,52 +17,58 @@ check_include_files(iconv.h HAVE_ICONV_H)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/gitinfo.h.in ${CMAKE_CURRENT_BINARY_DIR}/gitinfo.h)
 
-set(flags "-std=gnu++0x -Wall -Wno-overloaded-virtual -Wno-strict-aliasing -fshort-wchar -fsigned-char -fmessage-length=0 -fdata-sections -ffunction-sections -fno-exceptions -fvisibility=hidden -D_FILE_OFFSET_BITS=64")
+set(flags "-std=gnu++0x -fshort-wchar -fsigned-char -fmessage-length=0 -fdata-sections -ffunction-sections -fno-exceptions -D_FILE_OFFSET_BITS=64")
 set(link_flags " ")
-
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-	set(link_flags "${link_flags} -static-libgcc -static-libstdc++ -Wl,--no-as-needed")
-endif()
 
 if(${OS} STREQUAL "Darwin")
 	set(link_flags "${link_flags} -mmacosx-version-min=10.6")
 	set(flags "${flags} -mmacosx-version-min=10.6")
-	target_link_libraries(fibjs dl iconv pthread)
+	target_link_libraries(fibjs dl iconv stdc++)
 endif()
 
 if(${OS} STREQUAL "Linux")
-	target_link_libraries(fibjs dl rt pthread)
+	target_link_libraries(fibjs dl rt)
 endif()
 
 if(${OS} STREQUAL "FreeBSD")
 	find_library(execinfo execinfo "/usr/local/lib" "/usr/lib")
 	target_link_libraries(fibjs ${execinfo})
-	target_link_libraries(fibjs pthread)
 endif()
 
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+	set(link_flags "${link_flags} -Wl,--wrap=malloc -Wl,--wrap=free -Wl,--wrap=calloc -Wl,--wrap=realloc")
+endif()
 
 if(${BUILD_TYPE} STREQUAL "Release")
-	set(flags "${flags} -O3")
+	set(flags "${flags} -O3 -w -fomit-frame-pointer -fvisibility=hidden")
 	add_definitions(-DNDEBUG=1)
 
 	if(${OS} STREQUAL "Linux" AND ${ARCH} STREQUAL "x64")
 		set(link_flags "${link_flags} -Wl,--wrap=memcpy")
 	endif()
+
+	if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+		set(link_flags "${link_flags} -static-libgcc -static-libstdc++ -Wl,--no-as-needed")
+	endif()
 endif()
 
 if(${BUILD_TYPE} STREQUAL "Debug")
-	set(flags "${flags} -g -O0")
+	set(flags "${flags} -g -O0 -Wall -Wno-overloaded-virtual")
 	add_definitions(-DDEBUG=1)
 endif()
 
 if(${BUILD_TYPE} STREQUAL "Release32")
-	set(flags "${flags} -O3 -m32")
+	set(flags "${flags} -O3 -m32 -w -fomit-frame-pointer -fvisibility=hidden")
 	set(link_flags "${link_flags} -m32")
 	add_definitions(-DNDEBUG=1)
+
+	if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+		set(link_flags "${link_flags} -static-libgcc -static-libstdc++ -Wl,--no-as-needed")
+	endif()
 endif()
 
 if(${BUILD_TYPE} STREQUAL "Debug32")
-	set(flags "${flags} -g -O0 -m32")
+	set(flags "${flags} -g -O0 -m32 -Wall -Wno-overloaded-virtual")
 	set(link_flags "${link_flags} -m32")
 	add_definitions(-DDEBUG=1)
 endif()
@@ -71,10 +77,12 @@ set_target_properties(fibjs PROPERTIES COMPILE_FLAGS ${flags})
 
 include_directories("${PROJECT_SOURCE_DIR}/include" "${PROJECT_SOURCE_DIR}/../vender" "${PROJECT_SOURCE_DIR}/../vender/v8" "${CMAKE_CURRENT_BINARY_DIR}")
 
-set(libs exlib expat gumbo gd tiff jpeg png zlib leveldb snappy ev pcre sqlite mongo umysql uuid exif winiconv mbedtls v8)
+set(libs jemalloc exlib expat gumbo gd tiff jpeg png zlib leveldb snappy ev pcre sqlite mongo umysql uuid exif winiconv mbedtls v8)
 
 foreach(lib ${libs})
 	target_link_libraries(fibjs "${BIN_DIR}/vender/lib${lib}.a")
 endforeach()
+
+target_link_libraries(fibjs pthread)
 
 set_target_properties(fibjs PROPERTIES LINK_FLAGS ${link_flags})

@@ -19,25 +19,25 @@ namespace fibjs
 
 void setOption(SOCKET s)
 {
-    int keepAlive = 1;
+    int32_t keepAlive = 1;
     setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (void *) &keepAlive,
                sizeof(keepAlive));
 
 #ifdef TCP_KEEPIDLE
-    int keepIdle = KEEPALIVE_TIMEOUT;
+    int32_t keepIdle = KEEPALIVE_TIMEOUT;
     setsockopt(s, SOL_TCP, TCP_KEEPIDLE, (void *) &keepIdle, sizeof(keepIdle));
 #endif
 
 #ifdef TCP_KEEPINTVL
-    int keepInterval = 20;
-    int keepCount = 10;
+    int32_t keepInterval = 20;
+    int32_t keepCount = 10;
 
     setsockopt(s, SOL_TCP, TCP_KEEPINTVL, (void *) &keepInterval,
                sizeof(keepInterval));
     setsockopt(s, SOL_TCP, TCP_KEEPCNT, (void *) &keepCount, sizeof(keepCount));
 #endif
 
-    int noDelay = 1;
+    int32_t noDelay = 1;
 
     setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (void *) &noDelay, sizeof(noDelay));
 }
@@ -74,36 +74,31 @@ result_t net_base::backend(std::string &retVal)
 class asyncEv;
 
 static ev_async s_asEvent;
-static exlib::lockfree<asyncEv> s_evWait;
+static exlib::LockedList<asyncEv> s_evWait;
 
-class asyncEv: public ev_io
+class asyncEv: public ev_io,
+    public exlib::linkitem
 {
 public:
-    asyncEv() : m_next(NULL)
-    {}
-
     virtual ~asyncEv()
     {
     }
 
     void post()
     {
-        s_evWait.put(this);
+        s_evWait.putTail(this);
         ev_async_send(s_loop, &s_asEvent);
     }
 
     virtual void start()
     {
     }
-
-public:
-    asyncEv *m_next;
 };
 
 class asyncProc: public asyncEv
 {
 public:
-    asyncProc(SOCKET s, int op, exlib::AsyncEvent *ac, int32_t &guard, void *&opt) :
+    asyncProc(SOCKET s, int32_t op, AsyncEvent *ac, intptr_t &guard, void *&opt) :
         m_s(s), m_op(op), m_ac(ac), m_guard(guard), m_opt(opt)
     {
     }
@@ -140,7 +135,7 @@ public:
         ready(process());
     }
 
-    void ready(int v)
+    void ready(int32_t v)
     {
         m_opt = NULL;
         m_guard = 0;
@@ -156,13 +151,13 @@ public:
 
 public:
     SOCKET m_s;
-    int m_op;
-    exlib::AsyncEvent *m_ac;
-    int32_t &m_guard;
+    int32_t m_op;
+    AsyncEvent *m_ac;
+    intptr_t &m_guard;
     void *&m_opt;
 
 private:
-    static void io_cb(struct ev_loop *loop, struct ev_io *watcher, int revents)
+    static void io_cb(struct ev_loop *loop, struct ev_io *watcher, int32_t revents)
     {
         ((asyncProc *) watcher)->onready();
     }
@@ -174,7 +169,6 @@ public:
     _acSocket()
     {
         s_loop = EV_DEFAULT;
-        start();
     }
 
     virtual void Run()
@@ -197,20 +191,17 @@ public:
 private:
     static void doAsync()
     {
-        asyncEv *p = s_evWait.getList(), *p1;
+        exlib::List<asyncEv> jobs;
+        asyncEv *p1;
 
-        while (p)
-        {
-            p1 = (asyncEv *) p->m_next;
-            p->m_next = NULL;
-            p->start();
+        s_evWait.getList(jobs);
 
-            p = p1;
-        }
+        while ((p1 = jobs.getHead()) != 0)
+            p1->start();
     }
 
     static void tm_cb(struct ev_loop *loop, struct ev_timer *watcher,
-                      int revents)
+                      int32_t revents)
     {
         ev_timer_init(watcher, tm_cb, 10, 0);
         ev_timer_start(s_loop, watcher);
@@ -219,18 +210,23 @@ private:
     }
 
     static void as_cb(struct ev_loop *loop, struct ev_async *watcher,
-                      int revents)
+                      int32_t revents)
     {
         doAsync();
     }
 } s_acSock;
 
-void Socket::cancel_socket(exlib::AsyncEvent *ac)
+void init_net()
+{
+    s_acSock.start();
+}
+
+void Socket::cancel_socket(AsyncEvent *ac)
 {
     class asyncCancel: public asyncEv
     {
     public:
-        asyncCancel(void *&opt1, void *&opt2, exlib::AsyncEvent *ac) :
+        asyncCancel(void *&opt1, void *&opt2, AsyncEvent *ac) :
             m_ac(ac), m_opt1(opt1), m_opt2(opt2)
         {
         }
@@ -248,7 +244,7 @@ void Socket::cancel_socket(exlib::AsyncEvent *ac)
         }
 
     public:
-        exlib::AsyncEvent *m_ac;
+        AsyncEvent *m_ac;
         void *&m_opt1;
         void *&m_opt2;
     };
@@ -256,22 +252,22 @@ void Socket::cancel_socket(exlib::AsyncEvent *ac)
     (new asyncCancel(m_RecvOpt, m_SendOpt, ac))->post();
 }
 
-result_t Socket::connect(const char *host, int32_t port, exlib::AsyncEvent *ac)
+result_t Socket::connect(const char *host, int32_t port, AsyncEvent *ac)
 {
     class asyncConnect: public asyncProc
     {
     public:
-        asyncConnect(SOCKET s, inetAddr &ai, exlib::AsyncEvent *ac, int32_t &guard, void *&opt) :
+        asyncConnect(SOCKET s, inetAddr &ai, AsyncEvent *ac, intptr_t &guard, void *&opt) :
             asyncProc(s, EV_WRITE, ac, guard, opt), m_ai(ai)
         {
         }
 
         virtual result_t process()
         {
-            int n = ::connect(m_s, (struct sockaddr *) &m_ai, m_ai.size());
+            int32_t n = ::connect(m_s, (struct sockaddr *) &m_ai, m_ai.size());
             if (n == SOCKET_ERROR)
             {
-                int nError = errno;
+                int32_t nError = errno;
                 return CHECK_ERROR((nError == EINPROGRESS) ? CALL_E_PENDDING : -nError);
             }
 
@@ -323,13 +319,13 @@ result_t Socket::connect(const char *host, int32_t port, exlib::AsyncEvent *ac)
     return (new asyncConnect(m_sock, addr_info, ac, m_inRecv, m_RecvOpt))->call();
 }
 
-result_t Socket::accept(obj_ptr<Socket_base> &retVal, exlib::AsyncEvent *ac)
+result_t Socket::accept(obj_ptr<Socket_base> &retVal, AsyncEvent *ac)
 {
     class asyncAccept: public asyncProc
     {
     public:
         asyncAccept(SOCKET s, obj_ptr<Socket_base> &retVal,
-                    exlib::AsyncEvent *ac, int32_t &guard, void *&opt) :
+                    AsyncEvent *ac, intptr_t &guard, void *&opt) :
             asyncProc(s, EV_READ, ac, guard, opt), m_retVal(retVal)
         {
         }
@@ -341,7 +337,7 @@ result_t Socket::accept(obj_ptr<Socket_base> &retVal, exlib::AsyncEvent *ac)
             SOCKET c = ::accept(m_s, (sockaddr *) &ai, &sz);
             if (c == INVALID_SOCKET)
             {
-                int nError = errno;
+                int32_t nError = errno;
                 return CHECK_ERROR((nError == EWOULDBLOCK) ? CALL_E_PENDDING : -nError);
             }
 
@@ -349,7 +345,7 @@ result_t Socket::accept(obj_ptr<Socket_base> &retVal, exlib::AsyncEvent *ac)
             fcntl(c, F_SETFD, FD_CLOEXEC);
 
 #ifdef MacOS
-            int set_option = 1;
+            int32_t set_option = 1;
             setsockopt(c, SOL_SOCKET, SO_NOSIGPIPE, &set_option,
                        sizeof(set_option));
 #endif
@@ -380,13 +376,13 @@ result_t Socket::accept(obj_ptr<Socket_base> &retVal, exlib::AsyncEvent *ac)
 }
 
 result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                      exlib::AsyncEvent *ac, bool bRead)
+                      AsyncEvent *ac, bool bRead)
 {
     class asyncRecv: public asyncProc
     {
     public:
         asyncRecv(SOCKET s, int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                  exlib::AsyncEvent *ac, bool bRead, int32_t &guard, void *&opt) :
+                  AsyncEvent *ac, bool bRead, intptr_t &guard, void *&opt) :
             asyncProc(s, EV_READ, ac, guard, opt), m_retVal(retVal), m_pos(0), m_bRead(
                 bRead)
         {
@@ -397,11 +393,11 @@ result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
         {
             do
             {
-                int n = (int) ::recv(m_s, &m_buf[m_pos], m_buf.length() - m_pos,
-                                     MSG_NOSIGNAL);
+                int32_t n = (int32_t) ::recv(m_s, &m_buf[m_pos], m_buf.length() - m_pos,
+                                             MSG_NOSIGNAL);
                 if (n == SOCKET_ERROR)
                 {
-                    int nError = errno;
+                    int32_t nError = errno;
                     if (nError == ECONNRESET)
                         n = 0;
                     else
@@ -416,7 +412,7 @@ result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
                 if (m_pos == 0)
                     return CALL_RETURN_NULL;
             }
-            while (m_bRead && m_pos < (int) m_buf.length());
+            while (m_bRead && m_pos < (int32_t) m_buf.length());
 
             m_buf.resize(m_pos);
             m_retVal = new Buffer(m_buf);
@@ -436,7 +432,7 @@ result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
 
     public:
         obj_ptr<Buffer_base> &m_retVal;
-        int m_pos;
+        int32_t m_pos;
         bool m_bRead;
         std::string m_buf;
     };
@@ -453,12 +449,12 @@ result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
     return (new asyncRecv(m_sock, bytes, retVal, ac, bRead, m_inRecv, m_RecvOpt))->call();
 }
 
-result_t Socket::send(Buffer_base *data, exlib::AsyncEvent *ac)
+result_t Socket::send(Buffer_base *data, AsyncEvent *ac)
 {
     class asyncSend: public asyncProc
     {
     public:
-        asyncSend(SOCKET s, Buffer_base *data, exlib::AsyncEvent *ac, int32_t &guard, void *&opt) :
+        asyncSend(SOCKET s, Buffer_base *data, AsyncEvent *ac, intptr_t &guard, void *&opt) :
             asyncProc(s, EV_WRITE, ac, guard, opt)
         {
             data->toString(m_buf);
@@ -470,10 +466,10 @@ result_t Socket::send(Buffer_base *data, exlib::AsyncEvent *ac)
         {
             while (m_sz)
             {
-                int n = (int) ::send(m_s, m_p, m_sz, MSG_NOSIGNAL);
+                int32_t n = (int32_t) ::send(m_s, m_p, m_sz, MSG_NOSIGNAL);
                 if (n == SOCKET_ERROR)
                 {
-                    int nError = errno;
+                    int32_t nError = errno;
                     return CHECK_ERROR((nError == EWOULDBLOCK) ? CALL_E_PENDDING : -nError);
                 }
 
@@ -497,7 +493,7 @@ result_t Socket::send(Buffer_base *data, exlib::AsyncEvent *ac)
     public:
         std::string m_buf;
         const char *m_p;
-        int m_sz;
+        int32_t m_sz;
     };
 
     if (m_sock == INVALID_SOCKET)

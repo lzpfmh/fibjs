@@ -45,17 +45,17 @@ result_t HttpResponse::set_body(SeekableStream_base *newVal)
 }
 
 result_t HttpResponse::read(int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                            exlib::AsyncEvent *ac)
+                            AsyncEvent *ac)
 {
     return m_message.read(bytes, retVal, ac);
 }
 
-result_t HttpResponse::readAll(obj_ptr<Buffer_base> &retVal, exlib::AsyncEvent *ac)
+result_t HttpResponse::readAll(obj_ptr<Buffer_base> &retVal, AsyncEvent *ac)
 {
     return m_message.readAll(retVal, ac);
 }
 
-result_t HttpResponse::write(Buffer_base *data, exlib::AsyncEvent *ac)
+result_t HttpResponse::write(Buffer_base *data, AsyncEvent *ac)
 {
     return m_message.write(data, ac);
 }
@@ -73,6 +73,16 @@ result_t HttpResponse::get_keepAlive(bool &retVal)
 result_t HttpResponse::set_keepAlive(bool newVal)
 {
     return m_message.set_keepAlive(newVal);
+}
+
+result_t HttpResponse::get_upgrade(bool &retVal)
+{
+    return m_message.get_upgrade(retVal);
+}
+
+result_t HttpResponse::set_upgrade(bool newVal)
+{
+    return m_message.set_upgrade(newVal);
 }
 
 result_t HttpResponse::get_maxHeadersCount(int32_t &retVal)
@@ -110,7 +120,7 @@ result_t HttpResponse::allHeader(const char *name, obj_ptr<List_base> &retVal)
     return m_message.allHeader(name, retVal);
 }
 
-result_t HttpResponse::addHeader(v8::Local<v8::Object> map)
+result_t HttpResponse::addHeader(Map_base* map)
 {
     return m_message.addHeader(map);
 }
@@ -120,7 +130,7 @@ result_t HttpResponse::addHeader(const char *name, Variant value)
     return m_message.addHeader(name, value);
 }
 
-result_t HttpResponse::setHeader(v8::Local<v8::Object> map)
+result_t HttpResponse::setHeader(Map_base* map)
 {
     return m_message.setHeader(map);
 }
@@ -206,7 +216,7 @@ static const char *const status_lines[] =
     " 508 unused", " 509 unused", " 510 Not Extended"
 #define RESPONSE_CODES 55
 };
-static int shortcut[6] =
+static int32_t shortcut[6] =
 { LEVEL_100, LEVEL_200, LEVEL_300, LEVEL_400, LEVEL_500, RESPONSE_CODES };
 static unsigned char status_lines_size[RESPONSE_CODES];
 
@@ -215,14 +225,14 @@ static class _init_status_line
 public:
     _init_status_line()
     {
-        int i;
+        int32_t i;
 
         for (i = 0; i < RESPONSE_CODES; i++)
             status_lines_size[i] = (unsigned char) qstrlen(status_lines[i]);
     }
 } s_init_status_line;
 
-result_t HttpResponse::sendTo(Stream_base *stm, exlib::AsyncEvent *ac)
+result_t HttpResponse::sendTo(Stream_base *stm, AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -252,7 +262,7 @@ result_t HttpResponse::sendTo(Stream_base *stm, exlib::AsyncEvent *ac)
         m_cookies.Release();
     }
 
-    int pos = shortcut[m_status / 100 - 1] + m_status % 100;
+    int32_t pos = shortcut[m_status / 100 - 1] + m_status % 100;
     std::string strCommand;
 
     get_protocol(strCommand);
@@ -261,20 +271,20 @@ result_t HttpResponse::sendTo(Stream_base *stm, exlib::AsyncEvent *ac)
     return m_message.sendTo(stm, strCommand, ac);
 }
 
-result_t HttpResponse::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
+result_t HttpResponse::readFrom(BufferedStream_base *stm, AsyncEvent *ac)
 {
-    class asyncReadFrom: public asyncState
+    class asyncReadFrom: public AsyncState
     {
     public:
         asyncReadFrom(HttpResponse *pThis, BufferedStream_base *stm,
-                      exlib::AsyncEvent *ac) :
-            asyncState(ac), m_pThis(pThis), m_stm(stm)
+                      AsyncEvent *ac) :
+            AsyncState(ac), m_pThis(pThis), m_stm(stm)
         {
             m_pThis->clear();
             set(begin);
         }
 
-        static int begin(asyncState *pState, int n)
+        static int32_t begin(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
 
@@ -283,7 +293,7 @@ result_t HttpResponse::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
                                           pThis);
         }
 
-        static int command(asyncState *pState, int n)
+        static int32_t command(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
             result_t hr;
@@ -341,7 +351,7 @@ result_t HttpResponse::set_status(int32_t newVal)
         newVal = 500;
     else
     {
-        int n = newVal / 100;
+        int32_t n = newVal / 100;
         if (shortcut[n - 1] + newVal % 100 >= shortcut[n])
             newVal = 500;
     }
@@ -406,7 +416,7 @@ result_t HttpResponse::redirect(const char *url)
     return 0;
 }
 
-result_t HttpResponse::sendHeader(Stream_base* stm, exlib::AsyncEvent* ac)
+result_t HttpResponse::sendHeader(Stream_base* stm, AsyncEvent* ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -436,7 +446,7 @@ result_t HttpResponse::sendHeader(Stream_base* stm, exlib::AsyncEvent* ac)
         m_cookies.Release();
     }
 
-    int pos = shortcut[m_status / 100 - 1] + m_status % 100;
+    int32_t pos = shortcut[m_status / 100 - 1] + m_status % 100;
     std::string strCommand;
 
     get_protocol(strCommand);

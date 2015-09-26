@@ -15,13 +15,13 @@ namespace fibjs
 
 #define TINY_SIZE   32768
 
-class asyncSendTo: public asyncState
+class asyncSendTo: public AsyncState
 {
 public:
     asyncSendTo(HttpMessage *pThis, Stream_base *stm,
-                std::string &strCommand, exlib::AsyncEvent *ac,
+                std::string &strCommand, AsyncEvent *ac,
                 bool headerOnly = false) :
-        asyncState(ac), m_pThis(pThis), m_stm(stm), m_strCommand(
+        AsyncState(ac), m_pThis(pThis), m_stm(stm), m_strCommand(
             strCommand), m_headerOnly(headerOnly)
     {
         m_contentLength = 0;
@@ -33,7 +33,7 @@ public:
             set(header);
     }
 
-    static int tinybody(asyncState *pState, int n)
+    static int32_t tinybody(AsyncState *pState, int32_t n)
     {
         asyncSendTo *pThis = (asyncSendTo *) pState;
 
@@ -44,7 +44,7 @@ public:
                    (int32_t) pThis->m_contentLength, pThis->m_buffer, pThis);
     }
 
-    static int header(asyncState *pState, int n)
+    static int32_t header(AsyncState *pState, int32_t n)
     {
         asyncSendTo *pThis = (asyncSendTo *) pState;
         size_t sz = pThis->m_strCommand.length();
@@ -57,7 +57,7 @@ public:
             pThis->m_buffer->toString(pThis->m_body);
             pThis->m_buffer.Release();
 
-            if (pThis->m_contentLength != (int) pThis->m_body.length())
+            if (pThis->m_contentLength != (int32_t) pThis->m_body.length())
                 return CHECK_ERROR(Runtime::setError("HttpMessage: body is not complate."));
         }
 
@@ -84,7 +84,7 @@ public:
         return pThis->m_stm->write(pThis->m_buffer, pThis);
     }
 
-    static int body(asyncState *pState, int n)
+    static int32_t body(AsyncState *pState, int32_t n)
     {
         asyncSendTo *pThis = (asyncSendTo *) pState;
 
@@ -98,7 +98,7 @@ public:
                                               pThis->m_contentLength, pThis->m_copySize, pThis);
     }
 
-    static int body_ok(asyncState *pState, int n)
+    static int32_t body_ok(AsyncState *pState, int32_t n)
     {
         asyncSendTo *pThis = (asyncSendTo *) pState;
 
@@ -117,12 +117,12 @@ public:
     std::string m_body;
     std::string m_strCommand;
     const char *m_strStatus;
-    int m_nStatus;
+    int32_t m_nStatus;
     bool m_headerOnly;
 };
 
 result_t HttpMessage::sendTo(Stream_base *stm, std::string &strCommand,
-                             exlib::AsyncEvent *ac)
+                             AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -131,7 +131,7 @@ result_t HttpMessage::sendTo(Stream_base *stm, std::string &strCommand,
 }
 
 result_t HttpMessage::sendHeader(Stream_base *stm, std::string &strCommand,
-                                 exlib::AsyncEvent *ac)
+                                 AsyncEvent *ac)
 {
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
@@ -139,20 +139,20 @@ result_t HttpMessage::sendHeader(Stream_base *stm, std::string &strCommand,
     return (new asyncSendTo(this, stm, strCommand, ac, true))->post(0);
 }
 
-result_t HttpMessage::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
+result_t HttpMessage::readFrom(BufferedStream_base *stm, AsyncEvent *ac)
 {
-    class asyncReadFrom: public asyncState
+    class asyncReadFrom: public AsyncState
     {
     public:
         asyncReadFrom(HttpMessage *pThis, BufferedStream_base *stm,
-                      exlib::AsyncEvent *ac) :
-            asyncState(ac), m_pThis(pThis), m_stm(stm), m_contentLength(0), m_bChunked(
+                      AsyncEvent *ac) :
+            AsyncState(ac), m_pThis(pThis), m_stm(stm), m_contentLength(0), m_bChunked(
                 false), m_headCount(0)
         {
             set(begin);
         }
 
-        static int begin(asyncState *pState, int n)
+        static int32_t begin(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
 
@@ -161,7 +161,7 @@ result_t HttpMessage::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
                                           pThis);
         }
 
-        static int header(asyncState *pState, int n)
+        static int32_t header(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
 
@@ -181,7 +181,7 @@ result_t HttpMessage::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
                                    "transfer-encoding:", 18))
                 {
                     _parser p(pThis->m_strLine.c_str() + 18,
-                              (int)pThis->m_strLine.length() - 18);
+                              (int32_t)pThis->m_strLine.length() - 18);
 
                     p.skipSpace();
                     if (qstricmp(p.now(), "chunked"))
@@ -225,7 +225,7 @@ result_t HttpMessage::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
             return pThis->done();
         }
 
-        static int body(asyncState *pState, int n)
+        static int32_t body(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
 
@@ -237,7 +237,7 @@ result_t HttpMessage::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
             return pThis->done();
         }
 
-        static int chunk_head(asyncState *pState, int n)
+        static int32_t chunk_head(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
 
@@ -246,7 +246,7 @@ result_t HttpMessage::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
                                           pThis);
         }
 
-        static int chunk_body(asyncState *pState, int n)
+        static int32_t chunk_body(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
             _parser p(pThis->m_strLine);
@@ -276,7 +276,7 @@ result_t HttpMessage::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
                                           pThis);
         }
 
-        static int chunk_body_end(asyncState *pState, int n)
+        static int32_t chunk_body_end(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
 
@@ -285,7 +285,7 @@ result_t HttpMessage::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
                                           pThis);
         }
 
-        static int chunk_end(asyncState *pState, int n)
+        static int32_t chunk_end(AsyncState *pState, int32_t n)
         {
             asyncReadFrom *pThis = (asyncReadFrom *) pState;
 
@@ -313,18 +313,25 @@ result_t HttpMessage::readFrom(BufferedStream_base *stm, exlib::AsyncEvent *ac)
     return (new asyncReadFrom(this, stm, ac))->post(0);
 }
 
-void HttpMessage::addHeader(const char *name, int szName, const char *value,
-                            int szValue)
+void HttpMessage::addHeader(const char *name, int32_t szName, const char *value,
+                            int32_t szValue)
 {
     if (szName == 10 && !qstricmp(name, "connection", szName))
-        m_keepAlive = !!qstristr(value, "keep-alive");
+    {
+        if (qstristr(value, "upgrade"))
+        {
+            m_upgrade = true;
+            m_keepAlive = true;
+        } else
+            m_keepAlive = !!qstristr(value, "keep-alive");
+    }
     else
         m_headers->add(name, szName, value, szValue);
 }
 
 result_t HttpMessage::addHeader(std::string &strLine)
 {
-    int p2;
+    int32_t p2;
     _parser p(strLine);
 
     p.skipWord(':');
@@ -344,7 +351,7 @@ size_t HttpMessage::size()
     int64_t l;
 
     // connection 10
-    sz += 10 + 4 + (m_keepAlive ? 10 : 5);
+    sz += 10 + 4 + (m_upgrade ? 7 : (m_keepAlive ? 10 : 5));
 
     // content-length 14
     get_length(l);
@@ -384,7 +391,9 @@ size_t HttpMessage::getData(char *buf, size_t sz)
 
     // connection 10
     cp(buf, sz, pos, "Connection: ", 12);
-    if (m_keepAlive)
+    if (m_upgrade)
+        cp(buf, sz, pos, "upgrade\r\n", 9);
+    else if (m_keepAlive)
         cp(buf, sz, pos, "keep-alive\r\n", 12);
     else
         cp(buf, sz, pos, "close\r\n", 7);
@@ -395,7 +404,7 @@ size_t HttpMessage::getData(char *buf, size_t sz)
     {
         char s[32];
         char *p;
-        int n;
+        int32_t n;
 
         cp(buf, sz, pos, "Content-Length: ", 16);
         p = s + 32;
@@ -457,6 +466,18 @@ result_t HttpMessage::set_keepAlive(bool newVal)
     return 0;
 }
 
+result_t HttpMessage::get_upgrade(bool &retVal)
+{
+    retVal = m_upgrade;
+    return 0;
+}
+
+result_t HttpMessage::set_upgrade(bool newVal)
+{
+    m_upgrade = newVal;
+    return 0;
+}
+
 result_t HttpMessage::get_maxHeadersCount(int32_t &retVal)
 {
     retVal = m_maxHeadersCount;
@@ -502,7 +523,7 @@ result_t HttpMessage::allHeader(const char *name, obj_ptr<List_base> &retVal)
     return m_headers->all(name, retVal);
 }
 
-result_t HttpMessage::addHeader(v8::Local<v8::Object> map)
+result_t HttpMessage::addHeader(Map_base* map)
 {
     return m_headers->add(map);
 }
@@ -512,7 +533,7 @@ result_t HttpMessage::addHeader(const char *name, Variant value)
     return m_headers->add(name, value);
 }
 
-result_t HttpMessage::setHeader(v8::Local<v8::Object> map)
+result_t HttpMessage::setHeader(Map_base* map)
 {
     return m_headers->set(map);
 }
@@ -542,6 +563,7 @@ result_t HttpMessage::clear()
 
     m_protocol.assign("HTTP/1.1", 8);
     m_keepAlive = true;
+    m_upgrade = false;
 
     m_origin.clear();
     m_encoding.clear();

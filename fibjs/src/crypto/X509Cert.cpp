@@ -9,7 +9,7 @@
 #include "ssl.h"
 #include "X509Cert.h"
 #include "parse.h"
-#include <mbedtls/polarssl/pem.h>
+#include <mbedtls/mbedtls/pem.h>
 #include "PKey.h"
 #include "QuickArray.h"
 #include <map>
@@ -19,25 +19,25 @@ namespace fibjs
 
 X509Cert::_name X509Cert::g_usages[] =
 {
-    {KU_DIGITAL_SIGNATURE, "digitalSignature"},
-    {KU_NON_REPUDIATION, "nonRepudiation"},
-    {KU_KEY_ENCIPHERMENT, "keyEncipherment"},
-    {KU_DATA_ENCIPHERMENT, "dataEncipherment"},
-    {KU_KEY_AGREEMENT, "keyAgreement"},
-    {KU_KEY_CERT_SIGN, "keyCertSign"},
-    {KU_CRL_SIGN, "cRLSign"}
+    {MBEDTLS_X509_KU_DIGITAL_SIGNATURE, "digitalSignature"},
+    {MBEDTLS_X509_KU_NON_REPUDIATION, "nonRepudiation"},
+    {MBEDTLS_X509_KU_KEY_ENCIPHERMENT, "keyEncipherment"},
+    {MBEDTLS_X509_KU_DATA_ENCIPHERMENT, "dataEncipherment"},
+    {MBEDTLS_X509_KU_KEY_AGREEMENT, "keyAgreement"},
+    {MBEDTLS_X509_KU_KEY_CERT_SIGN, "keyCertSign"},
+    {MBEDTLS_X509_KU_CRL_SIGN, "cRLSign"}
 };
 
 X509Cert::_name X509Cert::g_types[] =
 {
-    {NS_CERT_TYPE_SSL_CLIENT, "client"},
-    {NS_CERT_TYPE_SSL_SERVER, "server"},
-    {NS_CERT_TYPE_EMAIL, "email"},
-    {NS_CERT_TYPE_OBJECT_SIGNING, "objsign"},
-    {NS_CERT_TYPE_RESERVED, "reserved"},
-    {NS_CERT_TYPE_SSL_CA, "sslCA"},
-    {NS_CERT_TYPE_EMAIL_CA, "emailCA"},
-    {NS_CERT_TYPE_OBJECT_SIGNING_CA, "objCA"}
+    {MBEDTLS_X509_NS_CERT_TYPE_SSL_CLIENT, "client"},
+    {MBEDTLS_X509_NS_CERT_TYPE_SSL_SERVER, "server"},
+    {MBEDTLS_X509_NS_CERT_TYPE_EMAIL, "email"},
+    {MBEDTLS_X509_NS_CERT_TYPE_OBJECT_SIGNING, "objsign"},
+    {MBEDTLS_X509_NS_CERT_TYPE_RESERVED, "reserved"},
+    {MBEDTLS_X509_NS_CERT_TYPE_SSL_CA, "sslCA"},
+    {MBEDTLS_X509_NS_CERT_TYPE_EMAIL_CA, "emailCA"},
+    {MBEDTLS_X509_NS_CERT_TYPE_OBJECT_SIGNING_CA, "objCA"}
 };
 
 result_t X509Cert_base::_new(obj_ptr<X509Cert_base> &retVal, v8::Local<v8::Object> This)
@@ -46,12 +46,12 @@ result_t X509Cert_base::_new(obj_ptr<X509Cert_base> &retVal, v8::Local<v8::Objec
     return 0;
 }
 
-X509Cert::X509Cert()
+X509Cert::X509Cert() : m_rootLoaded(false)
 {
-    x509_crt_init(&m_crt);
+    mbedtls_x509_crt_init(&m_crt);
 }
 
-X509Cert::X509Cert(X509Cert *root, int no)
+X509Cert::X509Cert(X509Cert *root, int32_t no)
 {
     m_root = root;
     m_no = no;
@@ -60,7 +60,7 @@ X509Cert::X509Cert(X509Cert *root, int no)
 X509Cert::~X509Cert()
 {
     if (!m_root)
-        x509_crt_free(&m_crt);
+        mbedtls_x509_crt_free(&m_crt);
 }
 
 result_t X509Cert::load(Buffer_base *derCert)
@@ -68,27 +68,27 @@ result_t X509Cert::load(Buffer_base *derCert)
     if (m_root)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    int ret;
+    int32_t ret;
 
     std::string crt;
     derCert->toString(crt);
 
-    ret = x509_crt_parse_der(&m_crt, (const unsigned char *)crt.c_str(),
-                             crt.length());
+    ret = mbedtls_x509_crt_parse_der(&m_crt, (const unsigned char *)crt.c_str(),
+                                     crt.length());
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
     return 0;
 }
 
-result_t X509Cert::load(const x509_crt *crt)
+result_t X509Cert::load(const mbedtls_x509_crt *crt)
 {
     if (m_root)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    int ret;
+    int32_t ret;
 
-    ret = x509_crt_parse_der(&m_crt, crt->raw.p, crt->raw.len);
+    ret = mbedtls_x509_crt_parse_der(&m_crt, crt->raw.p, crt->raw.len);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -100,19 +100,19 @@ result_t X509Cert::load(const char *txtCert)
     if (m_root)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    int ret;
+    int32_t ret;
 
     if (qstrstr(txtCert, "BEGIN CERTIFICATE"))
     {
-        ret = x509_crt_parse(&m_crt, (const unsigned char *)txtCert,
-                             qstrlen(txtCert));
+        ret = mbedtls_x509_crt_parse(&m_crt, (const unsigned char *)txtCert,
+                                     qstrlen(txtCert) + 1);
         if (ret != 0)
             return CHECK_ERROR(_ssl::setError(ret));
 
         return 0;
     }
 
-    _parser p(txtCert, (int)qstrlen(txtCert));
+    _parser p(txtCert, (int32_t)qstrlen(txtCert));
     QuickArray<std::pair<std::string, std::string> > values;
     std::map<std::string, bool> verifies;
     std::map<std::string, bool> certs;
@@ -250,9 +250,9 @@ result_t X509Cert::load(const char *txtCert)
         it_trust = verifies.find(c.first);
         if (it_trust != verifies.end())
         {
-            ret = x509_crt_parse_der(&m_crt,
-                                     (const unsigned char *)c.second.c_str(),
-                                     c.second.length());
+            ret = mbedtls_x509_crt_parse_der(&m_crt,
+                                             (const unsigned char *)c.second.c_str(),
+                                             c.second.length());
             if (ret != 0)
                 return CHECK_ERROR(_ssl::setError(ret));
 
@@ -268,9 +268,9 @@ result_t X509Cert::load(const char *txtCert)
         it_trust = certs.find(c.first);
         if (it_trust != certs.end())
         {
-            ret = x509_crt_parse_der(&m_crt,
-                                     (const unsigned char *)c.second.c_str(),
-                                     c.second.length());
+            ret = mbedtls_x509_crt_parse_der(&m_crt,
+                                             (const unsigned char *)c.second.c_str(),
+                                             c.second.length() );
             if (ret != 0)
                 return CHECK_ERROR(_ssl::setError(ret));
 
@@ -279,7 +279,7 @@ result_t X509Cert::load(const char *txtCert)
     }
 
     if (!is_loaded)
-        return CHECK_ERROR(_ssl::setError(POLARSSL_ERR_X509_INVALID_FORMAT));
+        return CHECK_ERROR(_ssl::setError(MBEDTLS_ERR_X509_INVALID_FORMAT));
 
     return 0;
 }
@@ -291,7 +291,7 @@ result_t X509Cert::loadFile(const char *filename)
 
     result_t hr;
     std::string data;
-    int ret;
+    int32_t ret;
 
     hr = fs_base::ac_readFile(filename, data);
     if (hr < 0)
@@ -301,8 +301,8 @@ result_t X509Cert::loadFile(const char *filename)
             qstrstr(data.c_str(), "CKO_CERTIFICATE"))
         return load(data.c_str());
 
-    ret = x509_crt_parse_der(&m_crt, (const unsigned char *)data.c_str(),
-                             data.length());
+    ret = mbedtls_x509_crt_parse_der(&m_crt, (const unsigned char *)data.c_str(),
+                                     data.length());
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -311,14 +311,18 @@ result_t X509Cert::loadFile(const char *filename)
 
 result_t X509Cert::loadRootCerts()
 {
+    if (m_rootLoaded)
+        return 0;
+    m_rootLoaded = true;
+
     _cert *pca = g_root_ca;
-    int ret;
+    int32_t ret;
 
     while (pca->size)
     {
-        ret = x509_crt_parse_der(&m_crt,
-                                 (const unsigned char *)pca->data,
-                                 pca->size);
+        ret = mbedtls_x509_crt_parse_der(&m_crt,
+                                         (const unsigned char *)pca->data,
+                                         pca->size);
         if (ret != 0)
             return CHECK_ERROR(_ssl::setError(ret));
 
@@ -328,14 +332,14 @@ result_t X509Cert::loadRootCerts()
     return 0;
 }
 
-result_t X509Cert::verify(X509Cert_base *cert, bool &retVal, exlib::AsyncEvent *ac)
+result_t X509Cert::verify(X509Cert_base *cert, bool &retVal, AsyncEvent *ac)
 {
-    int ret;
-    int flags;
+    int32_t ret;
+    uint32_t flags;
 
-    ret = x509_crt_verify(&(((X509Cert *)cert)->m_crt), &m_crt, NULL, NULL, &flags,
-                          NULL, NULL);
-    if (ret == POLARSSL_ERR_X509_CERT_VERIFY_FAILED)
+    ret = mbedtls_x509_crt_verify(&(((X509Cert *)cert)->m_crt), &m_crt, NULL, NULL, &flags,
+                                  NULL, NULL);
+    if (ret == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED)
     {
         retVal = false;
         return 0;
@@ -355,11 +359,11 @@ result_t X509Cert::dump(v8::Local<v8::Array> &retVal)
     if (m_root)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    Isolate &isolate = Isolate::now();
-    retVal = v8::Array::New(isolate.isolate);
+    Isolate* isolate = Isolate::now();
+    retVal = v8::Array::New(isolate->m_isolate);
 
-    const x509_crt *pCert = &m_crt;
-    int ret, n = 0;
+    const mbedtls_x509_crt *pCert = &m_crt;
+    int32_t ret, n = 0;
     std::string buf;
     size_t olen;
 
@@ -368,14 +372,14 @@ result_t X509Cert::dump(v8::Local<v8::Array> &retVal)
         if (pCert->raw.len > 0)
         {
             buf.resize(pCert->raw.len * 2 + 64);
-            ret = pem_write_buffer(PEM_BEGIN_CRT, PEM_END_CRT,
-                                   pCert->raw.p, pCert->raw.len,
-                                   (unsigned char *)&buf[0], buf.length(), &olen);
+            ret = mbedtls_pem_write_buffer(PEM_BEGIN_CRT, PEM_END_CRT,
+                                           pCert->raw.p, pCert->raw.len,
+                                           (unsigned char *)&buf[0], buf.length(), &olen);
             if (ret != 0)
                 return CHECK_ERROR(_ssl::setError(ret));
 
-            retVal->Set(n ++, v8::String::NewFromUtf8(isolate.isolate, buf.c_str(),
-                        v8::String::kNormalString, (int) olen - 1));
+            retVal->Set(n ++, v8::String::NewFromUtf8(isolate->m_isolate, buf.c_str(),
+                        v8::String::kNormalString, (int32_t) olen - 1));
         }
         pCert = pCert->next;
     }
@@ -388,18 +392,20 @@ result_t X509Cert::clear()
     if (m_root)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    x509_crt_free(&m_crt);
-    x509_crt_init(&m_crt);
+    mbedtls_x509_crt_free(&m_crt);
+    mbedtls_x509_crt_init(&m_crt);
+    m_rootLoaded = false;
+
     return 0;
 }
 
-x509_crt *X509Cert::get_crt()
+mbedtls_x509_crt *X509Cert::get_crt()
 {
     if (!m_root)
         return &m_crt;
 
-    int n = m_no;
-    x509_crt *crt = &m_root->m_crt;
+    int32_t n = m_no;
+    mbedtls_x509_crt *crt = &m_root->m_crt;
 
     while (n && (crt = crt->next))
         n --;
@@ -409,7 +415,7 @@ x509_crt *X509Cert::get_crt()
 
 result_t X509Cert::get_version(int32_t &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
@@ -419,23 +425,23 @@ result_t X509Cert::get_version(int32_t &retVal)
 
 result_t X509Cert::get_serial(std::string &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    int ret;
-    mpi serial;
+    int32_t ret;
+    mbedtls_mpi serial;
 
-    mpi_init(&serial);
-    ret = mpi_read_binary(&serial, crt->serial.p, crt->serial.len);
+    mbedtls_mpi_init(&serial);
+    ret = mbedtls_mpi_read_binary(&serial, crt->serial.p, crt->serial.len);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
     retVal.resize(8192);
     size_t sz = retVal.length();
 
-    ret = mpi_write_string(&serial, 10, &retVal[0], &sz);
-    mpi_free(&serial);
+    ret = mbedtls_mpi_write_string(&serial, 10, &retVal[0], sz, &sz);
+    mbedtls_mpi_free(&serial);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -446,16 +452,16 @@ result_t X509Cert::get_serial(std::string &retVal)
 
 result_t X509Cert::get_issuer(std::string &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    int ret;
+    int32_t ret;
     std::string buf;
 
     buf.resize(1024);
 
-    ret = x509_dn_gets(&buf[0], buf.length(), &crt->issuer);
+    ret = mbedtls_x509_dn_gets(&buf[0], buf.length(), &crt->issuer);
     if (ret < 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -467,16 +473,16 @@ result_t X509Cert::get_issuer(std::string &retVal)
 
 result_t X509Cert::get_subject(std::string &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    int ret;
+    int32_t ret;
     std::string buf;
 
     buf.resize(1024);
 
-    ret = x509_dn_gets(&buf[0], buf.length(), &crt->subject);
+    ret = mbedtls_x509_dn_gets(&buf[0], buf.length(), &crt->subject);
     if (ret < 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -488,7 +494,7 @@ result_t X509Cert::get_subject(std::string &retVal)
 
 result_t X509Cert::get_notBefore(date_t &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
@@ -501,7 +507,7 @@ result_t X509Cert::get_notBefore(date_t &retVal)
 
 result_t X509Cert::get_notAfter(date_t &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
@@ -514,7 +520,7 @@ result_t X509Cert::get_notAfter(date_t &retVal)
 
 result_t X509Cert::get_ca(bool &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
@@ -524,7 +530,7 @@ result_t X509Cert::get_ca(bool &retVal)
 
 result_t X509Cert::get_pathlen(int32_t &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
@@ -534,14 +540,14 @@ result_t X509Cert::get_pathlen(int32_t &retVal)
 
 result_t X509Cert::get_usage(std::string &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    int key_usage = crt->key_usage;
+    int32_t key_usage = crt->key_usage;
 
     int32_t i;
-    for (i = 0; i < (int)ARRAYSIZE(g_usages); i ++)
+    for (i = 0; i < (int32_t)ARRAYSIZE(g_usages); i ++)
     {
         if (key_usage & g_usages[i].id)
         {
@@ -556,14 +562,14 @@ result_t X509Cert::get_usage(std::string &retVal)
 
 result_t X509Cert::get_type(std::string &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
-    int cert_type = crt->ns_cert_type;
+    int32_t cert_type = crt->ns_cert_type;
 
     int32_t i;
-    for (i = 0; i < (int)ARRAYSIZE(g_types); i ++)
+    for (i = 0; i < (int32_t)ARRAYSIZE(g_types); i ++)
     {
         if (cert_type & g_types[i].id)
         {
@@ -578,7 +584,7 @@ result_t X509Cert::get_type(std::string &retVal)
 
 result_t X509Cert::get_publicKey(obj_ptr<PKey_base> &retVal)
 {
-    x509_crt *crt = get_crt();
+    mbedtls_x509_crt *crt = get_crt();
     if (!crt)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
 
@@ -597,7 +603,7 @@ result_t X509Cert::get_next(obj_ptr<X509Cert_base> &retVal)
 {
     if (m_root)
     {
-        x509_crt *crt = get_crt();
+        mbedtls_x509_crt *crt = get_crt();
         if (!crt || !crt->next)
             return CALL_RETURN_NULL;
 

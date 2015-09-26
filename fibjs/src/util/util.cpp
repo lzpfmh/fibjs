@@ -17,11 +17,12 @@
 #include <pcre/pcre.h>
 #include <tiff/include/tiffvers.h>
 #include <mongo/include/mongo.h>
-#include <mbedtls/polarssl/version.h>
+#include <mbedtls/mbedtls/version.h>
 #include <snappy/include/snappy.h>
 #include <leveldb/db.h>
 #include <expat/include/expat.h>
 #include "QuickArray.h"
+#include "StringBuffer.h"
 #include <map>
 
 #ifndef _WIN32
@@ -31,22 +32,11 @@
 namespace fibjs
 {
 
-inline void newline(std::string &strBuffer, int32_t padding)
+inline void newline(StringBuffer &strBuffer, int32_t padding)
 {
-    static char s_spc[] = "                                                                ";
-    int32_t n, n1;
-
-    strBuffer.append("\n", 1);
+    strBuffer.append('\n');
     if (padding > 0)
-    {
-        n = padding;
-        while (n)
-        {
-            n1 = n > 64 ? 64 : n;
-            strBuffer.append(s_spc, n1);
-            n -= n1;
-        }
-    }
+        strBuffer.append(std::string(padding, ' '));
 }
 
 class _item
@@ -77,19 +67,21 @@ public:
     int32_t mode;
 };
 
-void string_format(std::string &strBuffer, v8::Local<v8::Value> v)
+void string_format(StringBuffer &strBuffer, v8::Local<v8::Value> v)
 {
     std::string s;
     encoding_base::jsonEncode(v, s);
-    strBuffer += s;
+    strBuffer.append(s);
 }
 
 std::string json_format(v8::Local<v8::Value> obj)
 {
-    std::string strBuffer;
+    StringBuffer strBuffer;
 
     QuickArray<_item> stk;
+    QuickArray<v8::Local<v8::Object>> vals;
     v8::Local<v8::Value> v = obj;
+    v8::Local<v8::String> mark_name = v8::String::NewFromUtf8(Isolate::now()->m_isolate, "_util_format_mark");
     int32_t padding = 0;
     const int32_t tab_size = 2;
     _item *it = NULL;
@@ -97,14 +89,12 @@ std::string json_format(v8::Local<v8::Value> obj)
     while (true)
     {
         if (v.IsEmpty())
-            strBuffer += "undefined";
+            strBuffer.append("undefined");
         else if (v->IsUndefined() || v->IsNull() || v->IsDate() ||
                  v->IsBoolean() || v->IsBooleanObject())
-            strBuffer += *v8::String::Utf8Value(v);
-        else if (v->IsFunction())
-            strBuffer += "[Function]";
+            strBuffer.append(*v8::String::Utf8Value(v));
         else if (v->IsNumber() || v->IsNumberObject())
-            strBuffer += *v8::String::Utf8Value(v->ToNumber());
+            strBuffer.append(*v8::String::Utf8Value(v->ToNumber()));
         else if (v->IsString() || v->IsStringObject())
             string_format(strBuffer, v);
         else if (v->IsRegExp())
@@ -113,48 +103,35 @@ std::string json_format(v8::Local<v8::Value> obj)
             v8::Local<v8::String> src = re->GetSource();
             v8::RegExp::Flags flgs = re->GetFlags();
 
-            strBuffer += '/';
-            strBuffer += *v8::String::Utf8Value(src);
-            strBuffer += '/';
+            strBuffer.append('/');
+            strBuffer.append(*v8::String::Utf8Value(src));
+            strBuffer.append('/');
 
             if (flgs & v8::RegExp::kIgnoreCase)
-                strBuffer += 'i';
+                strBuffer.append('i');
             if (flgs & v8::RegExp::kGlobal)
-                strBuffer += 'g';
+                strBuffer.append('g');
             if (flgs & v8::RegExp::kMultiline)
-                strBuffer += 'm';
+                strBuffer.append('m');
         }
         else if (v->IsObject())
         {
-            int32_t sz = (int32_t)stk.size();
-            int32_t i;
-            bool bCircular = false;
-
-            for (i = 0; i < sz; i ++)
-            {
-                if (v->StrictEquals(stk[i].val))
-                {
-                    bCircular = true;
-                    break;
-                }
-            }
-
             do
             {
-                if (bCircular)
+                v8::Local<v8::Object> obj = v->ToObject();
+
+                if (v->IsFunction() && obj->GetPropertyNames()->Length() == 0)
                 {
-                    strBuffer += "[Circular]";
+                    strBuffer.append("[Function]");
                     break;
                 }
-
-                v8::Local<v8::Object> obj = v->ToObject();
 
                 obj_ptr<Buffer_base> buf = Buffer_base::getInstance(v);
                 if (buf)
                 {
                     std::string s;
                     buf->base64(s);
-                    strBuffer += s;
+                    strBuffer.append(s);
                     break;
                 }
 
@@ -163,16 +140,28 @@ std::string json_format(v8::Local<v8::Value> obj)
                 {
                     std::string s;
                     int64Val->toString(10, s);
-                    strBuffer += s;
+                    strBuffer.append(s);
                     break;
                 }
 
-                v8::Local<v8::Value> toArray = obj->Get(v8::String::NewFromUtf8(Isolate::now().isolate, "toArray"));
+                v8::Local<v8::Value> mk = obj->GetHiddenValue(mark_name);
+                if (!mk.IsEmpty())
+                {
+                    strBuffer.append("[Circular]");
+                    break;
+                }
+
+                vals.append(obj);
+                obj->SetHiddenValue(mark_name, obj);
+
+                v8::Local<v8::Value> toArray = obj->Get(v8::String::NewFromUtf8(Isolate::now()->m_isolate, "toArray"));
                 if (!IsEmpty(toArray) && toArray->IsFunction())
                 {
                     v = v8::Local<v8::Function>::Cast(toArray)->Call(obj, 0, NULL);
                     obj = v->ToObject();
                 }
+
+                int32_t sz = (int32_t)stk.size();
 
                 if (v->IsArray())
                 {
@@ -180,11 +169,11 @@ std::string json_format(v8::Local<v8::Value> obj)
                     int32_t len = keys->Length();
 
                     if (len == 0)
-                        strBuffer += "[]";
+                        strBuffer.append("[]");
                     else
                     {
                         if (len == 1 && v->StrictEquals(keys->Get(0)))
-                            strBuffer += "[Circular]";
+                            strBuffer.append("[Circular]");
                         else
                         {
                             stk.resize(sz + 1);
@@ -195,7 +184,7 @@ std::string json_format(v8::Local<v8::Value> obj)
                             it->keys = keys;
                             it->len = len;
 
-                            strBuffer += '[';
+                            strBuffer.append('[');
                             padding += tab_size;
                         }
                     }
@@ -206,11 +195,11 @@ std::string json_format(v8::Local<v8::Value> obj)
                 int32_t len = keys->Length();
 
                 if (len == 0)
-                    strBuffer += "{}";
+                    strBuffer.append("{}");
                 else
                 {
                     if (len == 1 && v->StrictEquals(obj->Get(keys->Get(0))))
-                        strBuffer += "[Circular]";
+                        strBuffer.append("[Circular]");
                     else
                     {
                         stk.resize(sz + 1);
@@ -222,7 +211,7 @@ std::string json_format(v8::Local<v8::Value> obj)
                         it->keys = keys;
                         it->len = len;
 
-                        strBuffer += '{';
+                        strBuffer.append('{');
                         padding += tab_size;
                     }
                 }
@@ -232,31 +221,36 @@ std::string json_format(v8::Local<v8::Value> obj)
 
         if (it)
         {
-            while (it->pos == it->len)
+            while (it && it->pos == it->len)
             {
                 padding -= tab_size;
                 newline(strBuffer, padding);
-                strBuffer += it->obj.IsEmpty() ? ']' : '}';
+                strBuffer.append(it->obj.IsEmpty() ? ']' : '}');
 
                 int32_t sz = (int32_t)stk.size();
-                if (sz == 1)
-                    return strBuffer;
+
                 stk.resize(sz - 1);
-                it = &stk[sz - 2];
+                if (sz > 1)
+                    it = &stk[sz - 2];
+                else
+                    it = NULL;
             }
 
+            if (!it)
+                break;
+
             if (it->pos)
-                strBuffer += ',';
+                strBuffer.append(',');
             newline(strBuffer, padding);
 
             v = it->keys->Get(it->pos ++);
 
             if (!it->obj.IsEmpty())
             {
-                v8::TryCatch try_catch;
+                TryCatch try_catch;
 
                 string_format(strBuffer, v);
-                strBuffer += ": ";
+                strBuffer.append(": ");
                 v = it->obj->Get(v);
             }
         }
@@ -264,7 +258,13 @@ std::string json_format(v8::Local<v8::Value> obj)
             break;
     }
 
-    return strBuffer;
+    int32_t sz1 = (int32_t)vals.size();
+    int32_t i;
+
+    for (i = 0; i < sz1; i ++)
+        vals[i]->DeleteHiddenValue(mark_name);
+
+    return strBuffer.str();
 }
 
 result_t util_base::format(const char *fmt, const v8::FunctionCallbackInfo<v8::Value> &args,
@@ -492,7 +492,7 @@ result_t util_base::has(v8::Local<v8::Value> v, const char *key, bool &retVal)
         return CHECK_ERROR(CALL_E_TYPEMISMATCH);
 
     v8::Local<v8::Object> obj = v->ToObject();
-    retVal = obj->HasOwnProperty(v8::String::NewFromUtf8(Isolate::now().isolate, key));
+    retVal = obj->HasOwnProperty(v8::String::NewFromUtf8(Isolate::now()->m_isolate, key));
     return 0;
 }
 
@@ -513,19 +513,19 @@ result_t util_base::keys(v8::Local<v8::Value> v, v8::Local<v8::Array> &retVal)
         }
     }
     else
-        retVal = v8::Array::New(Isolate::now().isolate);
+        retVal = v8::Array::New(Isolate::now()->m_isolate);
 
     return 0;
 }
 
 result_t util_base::values(v8::Local<v8::Value> v, v8::Local<v8::Array> &retVal)
 {
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
     if (v->IsObject())
     {
         v8::Local<v8::Object> obj = v->ToObject();
         v8::Local<v8::Array> keys = obj->GetPropertyNames();
-        v8::Local<v8::Array> arr = v8::Array::New(isolate.isolate);
+        v8::Local<v8::Array> arr = v8::Array::New(isolate->m_isolate);
 
         int32_t len = keys->Length();
         int32_t i, n = 0;
@@ -539,24 +539,24 @@ result_t util_base::values(v8::Local<v8::Value> v, v8::Local<v8::Array> &retVal)
         retVal = arr;
     }
     else
-        retVal = v8::Array::New(isolate.isolate);
+        retVal = v8::Array::New(isolate->m_isolate);
 
     return 0;
 }
 
 result_t util_base::clone(v8::Local<v8::Value> v, v8::Local<v8::Value> &retVal)
 {
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
     if (v->IsObject() && !object_base::getInstance(v))
     {
         if (v->IsFunction() || v->IsArgumentsObject() || v->IsSymbolObject())
             retVal = v;
         else if (v->IsDate())
-            retVal = v8::Date::New(isolate.isolate, v->NumberValue());
+            retVal = v8::Date::New(isolate->m_isolate, v->NumberValue());
         else if (v->IsBooleanObject())
             retVal = v8::BooleanObject::New(v->BooleanValue());
         else if (v->IsNumberObject())
-            retVal = v8::NumberObject::New(isolate.isolate, v->NumberValue());
+            retVal = v8::NumberObject::New(isolate->m_isolate, v->NumberValue());
         else if (v->IsStringObject())
             retVal = v8::StringObject::New(v->ToString());
         else if (v->IsRegExp())
@@ -620,10 +620,10 @@ result_t util_base::pick(v8::Local<v8::Value> v,
                          const v8::FunctionCallbackInfo<v8::Value> &args,
                          v8::Local<v8::Object> &retVal)
 {
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
     if (v->IsUndefined() || v->IsNull())
     {
-        retVal = v8::Object::New(isolate.isolate);
+        retVal = v8::Object::New(isolate->m_isolate);
         return 0;
     }
 
@@ -631,7 +631,7 @@ result_t util_base::pick(v8::Local<v8::Value> v,
         return CHECK_ERROR(CALL_E_TYPEMISMATCH);
 
     v8::Local<v8::Object> obj = v->ToObject();
-    v8::Local<v8::Object> obj1 = v8::Object::New(isolate.isolate);
+    v8::Local<v8::Object> obj1 = v8::Object::New(isolate->m_isolate);
     int32_t argc = args.Length();
     int32_t i, j;
 
@@ -668,10 +668,10 @@ result_t util_base::omit(v8::Local<v8::Value> v,
                          const v8::FunctionCallbackInfo<v8::Value> &args,
                          v8::Local<v8::Object> &retVal)
 {
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
     if (v->IsUndefined() || v->IsNull())
     {
-        retVal = v8::Object::New(isolate.isolate);
+        retVal = v8::Object::New(isolate->m_isolate);
         return 0;
     }
 
@@ -715,7 +715,7 @@ result_t util_base::omit(v8::Local<v8::Value> v,
 
     v8::Local<v8::Array> keys = obj->GetPropertyNames();
     int32_t len = keys->Length();
-    v8::Local<v8::Object> obj1 = v8::Object::New(isolate.isolate);
+    v8::Local<v8::Object> obj1 = v8::Object::New(isolate->m_isolate);
 
     for (i = 0; i < len; i ++)
     {
@@ -733,7 +733,7 @@ result_t util_base::omit(v8::Local<v8::Value> v,
 result_t util_base::intersection(const v8::FunctionCallbackInfo<v8::Value> &args,
                                  v8::Local<v8::Array> &retVal)
 {
-    v8::Local<v8::Array> arr = v8::Array::New(Isolate::now().isolate);
+    v8::Local<v8::Array> arr = v8::Array::New(Isolate::now()->m_isolate);
     int32_t argc = args.Length();
     int32_t i, j, k, n = 0;
 
@@ -798,11 +798,11 @@ result_t util_base::intersection(const v8::FunctionCallbackInfo<v8::Value> &args
 
 result_t util_base::first(v8::Local<v8::Value> v, v8::Local<v8::Value> &retVal)
 {
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     if (v->IsUndefined() || v->IsNull())
     {
-        retVal = v8::Undefined(isolate.isolate);
+        retVal = v8::Undefined(isolate->m_isolate);
         return 0;
     }
 
@@ -814,7 +814,7 @@ result_t util_base::first(v8::Local<v8::Value> v, v8::Local<v8::Value> &retVal)
 
     if (len == 0)
     {
-        retVal = v8::Undefined(isolate.isolate);
+        retVal = v8::Undefined(isolate->m_isolate);
         return 0;
     }
 
@@ -825,11 +825,11 @@ result_t util_base::first(v8::Local<v8::Value> v, v8::Local<v8::Value> &retVal)
 
 result_t util_base::first(v8::Local<v8::Value> v, int32_t n, v8::Local<v8::Value> &retVal)
 {
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     if (v->IsUndefined() || v->IsNull() || n <= 0)
     {
-        retVal = v8::Array::New(isolate.isolate);
+        retVal = v8::Array::New(isolate->m_isolate);
         return 0;
     }
 
@@ -843,7 +843,7 @@ result_t util_base::first(v8::Local<v8::Value> v, int32_t n, v8::Local<v8::Value
     if (n > len)
         n = len;
 
-    v8::Local<v8::Array> arr1 = v8::Array::New(isolate.isolate);
+    v8::Local<v8::Array> arr1 = v8::Array::New(isolate->m_isolate);
 
     for (i = 0; i < n; i ++)
         arr1->Set(i, arr->Get(i));
@@ -855,11 +855,11 @@ result_t util_base::first(v8::Local<v8::Value> v, int32_t n, v8::Local<v8::Value
 
 result_t util_base::last(v8::Local<v8::Value> v, v8::Local<v8::Value> &retVal)
 {
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     if (v->IsUndefined() || v->IsNull())
     {
-        retVal = v8::Undefined(isolate.isolate);
+        retVal = v8::Undefined(isolate->m_isolate);
         return 0;
     }
 
@@ -871,7 +871,7 @@ result_t util_base::last(v8::Local<v8::Value> v, v8::Local<v8::Value> &retVal)
 
     if (len == 0)
     {
-        retVal = v8::Undefined(isolate.isolate);
+        retVal = v8::Undefined(isolate->m_isolate);
         return 0;
     }
 
@@ -881,10 +881,10 @@ result_t util_base::last(v8::Local<v8::Value> v, v8::Local<v8::Value> &retVal)
 
 result_t util_base::last(v8::Local<v8::Value> v, int32_t n, v8::Local<v8::Value> &retVal)
 {
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
     if (v->IsUndefined() || v->IsNull() || n <= 0)
     {
-        retVal = v8::Array::New(isolate.isolate);
+        retVal = v8::Array::New(isolate->m_isolate);
         return 0;
     }
 
@@ -898,7 +898,7 @@ result_t util_base::last(v8::Local<v8::Value> v, int32_t n, v8::Local<v8::Value>
     if (n > len)
         n = len;
 
-    v8::Local<v8::Array> arr1 = v8::Array::New(isolate.isolate);
+    v8::Local<v8::Array> arr1 = v8::Array::New(isolate->m_isolate);
 
     for (i = 0; i < n; i ++)
         arr1->Set(i, arr->Get(len - n + i));
@@ -910,17 +910,17 @@ result_t util_base::last(v8::Local<v8::Value> v, int32_t n, v8::Local<v8::Value>
 
 result_t util_base::unique(v8::Local<v8::Value> v, bool sorted, v8::Local<v8::Array> &retVal)
 {
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
     if (v->IsUndefined() || v->IsNull())
     {
-        retVal = v8::Array::New(isolate.isolate);
+        retVal = v8::Array::New(isolate->m_isolate);
         return 0;
     }
 
     if (!v->IsArray())
         return CHECK_ERROR(CALL_E_TYPEMISMATCH);
 
-    v8::Local<v8::Array> arr1 = v8::Array::New(isolate.isolate);
+    v8::Local<v8::Array> arr1 = v8::Array::New(isolate->m_isolate);
     v8::Local<v8::Array> arr = v8::Local<v8::Array>::Cast(v);
     int32_t len = arr->Length();
     QuickArray<v8::Local<v8::Value> > vals;
@@ -960,7 +960,7 @@ result_t util_base::unique(v8::Local<v8::Value> v, bool sorted, v8::Local<v8::Ar
 result_t util_base::_union(const v8::FunctionCallbackInfo<v8::Value> &args,
                            v8::Local<v8::Array> &retVal)
 {
-    v8::Local<v8::Array> arr = v8::Array::New(Isolate::now().isolate);
+    v8::Local<v8::Array> arr = v8::Array::New(Isolate::now()->m_isolate);
     int32_t argc = args.Length();
     int32_t i, j, k, n = 0;
 
@@ -1000,15 +1000,15 @@ result_t util_base::flatten(v8::Local<v8::Value> list, bool shallow,
 
     bool bNext = true;
 
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     if (retVal.IsEmpty())
-        retVal = v8::Array::New(isolate.isolate);
+        retVal = v8::Array::New(isolate->m_isolate);
     else if (shallow)
         bNext = false;
 
     v8::Local<v8::Object> o = v8::Local<v8::Object>::Cast(list);
-    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate.isolate, "length"));
+    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate->m_isolate, "length"));
     if (IsEmpty(v))
         return CHECK_ERROR(CALL_E_TYPEMISMATCH);
 
@@ -1022,7 +1022,7 @@ result_t util_base::flatten(v8::Local<v8::Value> list, bool shallow,
         if (bNext && v->IsObject())
         {
             v8::Local<v8::Object> o1 = v8::Local<v8::Object>::Cast(v);
-            v = o->Get(v8::String::NewFromUtf8(isolate.isolate, "length"));
+            v = o->Get(v8::String::NewFromUtf8(isolate->m_isolate, "length"));
             if (IsEmpty(v))
                 retVal->Set(cnt ++, o->Get(i));
             else
@@ -1045,16 +1045,16 @@ result_t util_base::without(v8::Local<v8::Value> arr,
     if (!arr->IsObject())
         return CHECK_ERROR(CALL_E_TYPEMISMATCH);
 
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     v8::Local<v8::Object> o = v8::Local<v8::Object>::Cast(arr);
-    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate.isolate, "length"));
+    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate->m_isolate, "length"));
     if (IsEmpty(v))
         return CHECK_ERROR(CALL_E_TYPEMISMATCH);
 
     int32_t len = v->Int32Value();
 
-    v8::Local<v8::Array> arr1 = v8::Array::New(isolate.isolate);
+    v8::Local<v8::Array> arr1 = v8::Array::New(isolate->m_isolate);
     int32_t argc = args.Length();
     int32_t i, j, n = 0;
 
@@ -1079,7 +1079,7 @@ result_t util_base::difference(v8::Local<v8::Array> arr,
                                const v8::FunctionCallbackInfo<v8::Value> &args,
                                v8::Local<v8::Array> &retVal)
 {
-    v8::Local<v8::Array> arr1 = v8::Array::New(Isolate::now().isolate);
+    v8::Local<v8::Array> arr1 = v8::Array::New(Isolate::now()->m_isolate);
     int32_t len = arr->Length();
     int32_t argc = args.Length();
     int32_t i, j, k, n = 0, len1;
@@ -1126,9 +1126,9 @@ result_t util_base::each(v8::Local<v8::Value> list, v8::Local<v8::Function> iter
     v8::Local<v8::Value> args[3];
     args[2] = list;
 
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
     v8::Local<v8::Object> o = v8::Local<v8::Object>::Cast(list);
-    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate.isolate, "length"));
+    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate->m_isolate, "length"));
 
     if (IsEmpty(v))
     {
@@ -1154,7 +1154,7 @@ result_t util_base::each(v8::Local<v8::Value> list, v8::Local<v8::Function> iter
 
         for (i = 0; i < len; i ++)
         {
-            args[1] = v8::Int32::New(isolate.isolate, i);
+            args[1] = v8::Int32::New(isolate->m_isolate, i);
             args[0] = o->Get(args[1]);
 
             v = iterator->Call(context, 3, args);
@@ -1171,8 +1171,8 @@ result_t util_base::each(v8::Local<v8::Value> list, v8::Local<v8::Function> iter
 result_t util_base::map(v8::Local<v8::Value> list, v8::Local<v8::Function> iterator,
                         v8::Local<v8::Value> context, v8::Local<v8::Array> &retVal)
 {
-    Isolate &isolate = Isolate::now();
-    v8::Local<v8::Array> arr = v8::Array::New(isolate.isolate);
+    Isolate* isolate = Isolate::now();
+    v8::Local<v8::Array> arr = v8::Array::New(isolate->m_isolate);
 
     if (!list->IsObject())
     {
@@ -1184,7 +1184,7 @@ result_t util_base::map(v8::Local<v8::Value> list, v8::Local<v8::Function> itera
     args[2] = list;
 
     v8::Local<v8::Object> o = v8::Local<v8::Object>::Cast(list);
-    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate.isolate, "length"));
+    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate->m_isolate, "length"));
     int32_t cnt = 0;
 
     if (IsEmpty(v))
@@ -1213,7 +1213,7 @@ result_t util_base::map(v8::Local<v8::Value> list, v8::Local<v8::Function> itera
 
         for (i = 0; i < len; i ++)
         {
-            args[1] = v8::Int32::New(isolate.isolate, i);
+            args[1] = v8::Int32::New(isolate->m_isolate, i);
             args[0] = o->Get(args[1]);
 
             v = iterator->Call(context, 3, args);
@@ -1242,9 +1242,9 @@ result_t util_base::reduce(v8::Local<v8::Value> list, v8::Local<v8::Function> it
     v8::Local<v8::Value> args[4];
     args[3] = list;
 
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
     v8::Local<v8::Object> o = v8::Local<v8::Object>::Cast(list);
-    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate.isolate, "length"));
+    v8::Local<v8::Value> v = o->Get(v8::String::NewFromUtf8(isolate->m_isolate, "length"));
 
     if (IsEmpty(v))
     {
@@ -1272,7 +1272,7 @@ result_t util_base::reduce(v8::Local<v8::Value> list, v8::Local<v8::Function> it
 
         for (i = 0; i < len; i ++)
         {
-            args[2] = v8::Int32::New(isolate.isolate, i);
+            args[2] = v8::Int32::New(isolate->m_isolate, i);
             args[1] = o->Get(args[2]);
 
             args[0] = memo;
@@ -1291,56 +1291,67 @@ result_t util_base::reduce(v8::Local<v8::Value> list, v8::Local<v8::Function> it
 #define _STR(s) #s
 #define STR(s)  _STR(s)
 
-static const char s_version[] = "0.1.2";
+static const char s_version[] = "0.1.6";
 
 result_t util_base::buildInfo(v8::Local<v8::Object> &retVal)
 {
-    Isolate &isolate = Isolate::now();
-    retVal = v8::Object::New(isolate.isolate);
+    Isolate* isolate = Isolate::now();
+    retVal = v8::Object::New(isolate->m_isolate);
 
-    retVal->Set(v8::String::NewFromUtf8(isolate.isolate, "fibjs"), v8::String::NewFromUtf8(isolate.isolate, s_version));
+    retVal->Set(v8::String::NewFromUtf8(isolate->m_isolate, "fibjs"), v8::String::NewFromUtf8(isolate->m_isolate, s_version));
 
 #ifdef GIT_INFO
-    retVal->Set(v8::String::NewFromUtf8(isolate.isolate, "git"), v8::String::NewFromUtf8(isolate.isolate, GIT_INFO));
+    retVal->Set(v8::String::NewFromUtf8(isolate->m_isolate, "git"), v8::String::NewFromUtf8(isolate->m_isolate, GIT_INFO));
 #endif
 
-    retVal->Set(v8::String::NewFromUtf8(isolate.isolate, "build"),
-                v8::String::NewFromUtf8(isolate.isolate, __DATE__ " " __TIME__));
+#if defined(__clang__)
+    retVal->Set(v8::String::NewFromUtf8(isolate->m_isolate, "clang"),
+                v8::String::NewFromUtf8(isolate->m_isolate,  STR(__clang_major__) "." STR(__clang_minor__)));
+#elif defined(__GNUC__)
+    retVal->Set(v8::String::NewFromUtf8(isolate->m_isolate, "gcc"),
+                v8::String::NewFromUtf8(isolate->m_isolate,  STR(__GNUC__) "." STR(__GNUC_MINOR__) "." STR(__GNUC_PATCHLEVEL__)));
+#elif defined(_MSC_VER)
+    retVal->Set(v8::String::NewFromUtf8(isolate->m_isolate, "msvc"),
+                v8::String::NewFromUtf8(isolate->m_isolate,  STR(_MSC_VER)));
+#endif
+
+    retVal->Set(v8::String::NewFromUtf8(isolate->m_isolate, "date"),
+                v8::String::NewFromUtf8(isolate->m_isolate, __DATE__ " " __TIME__));
 
 #ifndef NDEBUG
-    retVal->Set(v8::String::NewFromUtf8(isolate.isolate, "debug"), v8::True(isolate.isolate));
+    retVal->Set(v8::String::NewFromUtf8(isolate->m_isolate, "debug"), v8::True(isolate->m_isolate));
 #endif
 
     {
-        v8::Local<v8::Object> vender = v8::Object::New(isolate.isolate);
+        v8::Local<v8::Object> vender = v8::Object::New(isolate->m_isolate);
         char str[64];
 
-        retVal->Set(v8::String::NewFromUtf8(isolate.isolate, "vender"), vender);
+        retVal->Set(v8::String::NewFromUtf8(isolate->m_isolate, "vender"), vender);
 
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "ev"),
-                    v8::String::NewFromUtf8(isolate.isolate,  STR(EV_VERSION_MAJOR) "." STR(EV_VERSION_MINOR)));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "ev"),
+                    v8::String::NewFromUtf8(isolate->m_isolate,  STR(EV_VERSION_MAJOR) "." STR(EV_VERSION_MINOR)));
 
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "expat"),
-                    v8::String::NewFromUtf8(isolate.isolate,  STR(XML_MAJOR_VERSION) "." STR(XML_MINOR_VERSION) "." STR(XML_MICRO_VERSION)));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "expat"),
+                    v8::String::NewFromUtf8(isolate->m_isolate,  STR(XML_MAJOR_VERSION) "." STR(XML_MINOR_VERSION) "." STR(XML_MICRO_VERSION)));
 
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "gd"), v8::String::NewFromUtf8(isolate.isolate, GD_VERSION_STRING));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "jpeg"), v8::String::NewFromUtf8(isolate.isolate,
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "gd"), v8::String::NewFromUtf8(isolate->m_isolate, GD_VERSION_STRING));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "jpeg"), v8::String::NewFromUtf8(isolate->m_isolate,
                     STR(JPEG_LIB_VERSION_MAJOR) "." STR(JPEG_LIB_VERSION_MINOR)));
         sprintf(str, "%d.%d", leveldb::kMajorVersion, leveldb::kMinorVersion);
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "leveldb"), v8::String::NewFromUtf8(isolate.isolate,  str));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "mongo"), v8::String::NewFromUtf8(isolate.isolate,
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "leveldb"), v8::String::NewFromUtf8(isolate->m_isolate,  str));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "mongo"), v8::String::NewFromUtf8(isolate->m_isolate,
                     STR(MONGO_MAJOR) "." STR(MONGO_MINOR)));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "pcre"), v8::String::NewFromUtf8(isolate.isolate,
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "pcre"), v8::String::NewFromUtf8(isolate->m_isolate,
                     STR(PCRE_MAJOR) "." STR(PCRE_MINOR)));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "png"), v8::String::NewFromUtf8(isolate.isolate, PNG_LIBPNG_VER_STRING));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "mbedtls"), v8::String::NewFromUtf8(isolate.isolate, POLARSSL_VERSION_STRING));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "snappy"),
-                    v8::String::NewFromUtf8(isolate.isolate,  STR(SNAPPY_MAJOR) "." STR(SNAPPY_MINOR) "." STR(SNAPPY_PATCHLEVEL)));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "sqlite"), v8::String::NewFromUtf8(isolate.isolate, SQLITE_VERSION));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "tiff"), v8::String::NewFromUtf8(isolate.isolate, TIFFLIB_VERSION_STR));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "uuid"), v8::String::NewFromUtf8(isolate.isolate, "1.6.2"));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "v8"), v8::String::NewFromUtf8(isolate.isolate, v8::V8::GetVersion()));
-        vender->Set(v8::String::NewFromUtf8(isolate.isolate, "zlib"), v8::String::NewFromUtf8(isolate.isolate, ZLIB_VERSION));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "png"), v8::String::NewFromUtf8(isolate->m_isolate, PNG_LIBPNG_VER_STRING));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "mbedtls"), v8::String::NewFromUtf8(isolate->m_isolate, MBEDTLS_VERSION_STRING));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "snappy"),
+                    v8::String::NewFromUtf8(isolate->m_isolate,  STR(SNAPPY_MAJOR) "." STR(SNAPPY_MINOR) "." STR(SNAPPY_PATCHLEVEL)));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "sqlite"), v8::String::NewFromUtf8(isolate->m_isolate, SQLITE_VERSION));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "tiff"), v8::String::NewFromUtf8(isolate->m_isolate, TIFFLIB_VERSION_STR));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "uuid"), v8::String::NewFromUtf8(isolate->m_isolate, "1.6.2"));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "v8"), v8::String::NewFromUtf8(isolate->m_isolate, v8::V8::GetVersion()));
+        vender->Set(v8::String::NewFromUtf8(isolate->m_isolate, "zlib"), v8::String::NewFromUtf8(isolate->m_isolate, ZLIB_VERSION));
     }
 
     return 0;

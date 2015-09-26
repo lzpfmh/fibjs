@@ -36,10 +36,10 @@ result_t SslSocket_base::_new(v8::Local<v8::Array> certs,
 
     if (sz)
     {
-        Isolate &isolate = Isolate::now();
-        v8::Local<v8::Value> sCrt = v8::String::NewFromUtf8(isolate.isolate, "crt",
+        Isolate* isolate = Isolate::now();
+        v8::Local<v8::Value> sCrt = v8::String::NewFromUtf8(isolate->m_isolate, "crt",
                                     v8::String::kNormalString, 3);
-        v8::Local<v8::Value> sKey = v8::String::NewFromUtf8(isolate.isolate, "key",
+        v8::Local<v8::Value> sKey = v8::String::NewFromUtf8(isolate->m_isolate, "key",
                                     v8::String::kNormalString, 3);
         int32_t i;
 
@@ -76,18 +76,25 @@ result_t SslSocket_base::_new(v8::Local<v8::Array> certs,
 
 SslSocket::SslSocket()
 {
-    ssl_init(&m_ssl);
+    mbedtls_ssl_init(&m_ssl);
+    mbedtls_ssl_config_init( &m_ssl_conf );
+    mbedtls_ssl_config_defaults( &m_ssl_conf,
+                                 MBEDTLS_SSL_IS_CLIENT,
+                                 MBEDTLS_SSL_TRANSPORT_STREAM,
+                                 MBEDTLS_SSL_PRESET_DEFAULT );
+    mbedtls_ssl_conf_authmode(&m_ssl_conf, g_ssl.m_authmode);
+    mbedtls_ssl_conf_rng(&m_ssl_conf, mbedtls_ctr_drbg_random, &g_ssl.ctr_drbg);
 
-    ssl_set_authmode(&m_ssl, g_ssl.m_authmode);
-    ssl_set_rng(&m_ssl, ctr_drbg_random, &g_ssl.ctr_drbg);
-    ssl_set_bio(&m_ssl, my_recv, this, my_send, this);
+    mbedtls_ssl_conf_min_version(&m_ssl_conf, MBEDTLS_SSL_MINOR_VERSION_3, g_ssl.m_min_version);
+    mbedtls_ssl_conf_max_version(&m_ssl_conf, MBEDTLS_SSL_MINOR_VERSION_3, g_ssl.m_max_version);
 
     m_recv_pos = 0;
 }
 
 SslSocket::~SslSocket()
 {
-    ssl_free(&m_ssl);
+    mbedtls_ssl_config_free( &m_ssl_conf );
+    mbedtls_ssl_free(&m_ssl);
     memset(&m_ssl, 0, sizeof(m_ssl));
 }
 
@@ -103,8 +110,8 @@ result_t SslSocket::setCert(X509Cert_base *crt, PKey_base *key)
     if (!priv)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    int ret = ssl_set_own_cert(&m_ssl, &((X509Cert *)crt)->m_crt,
-                               &((PKey *)key)->m_key);
+    int32_t ret = mbedtls_ssl_conf_own_cert(&m_ssl_conf, &((X509Cert *)crt)->m_crt,
+                                            &((PKey *)key)->m_key);
     if (ret != 0)
         return CHECK_ERROR(_ssl::setError(ret));
 
@@ -114,60 +121,60 @@ result_t SslSocket::setCert(X509Cert_base *crt, PKey_base *key)
     return 0;
 }
 
-int SslSocket::my_recv(unsigned char *buf, size_t len)
+int32_t SslSocket::my_recv(unsigned char *buf, size_t len)
 {
     if (!len)
         return 0;
 
     if (m_recv_pos < 0)
-        return POLARSSL_ERR_NET_CONN_RESET;
+        return MBEDTLS_ERR_NET_CONN_RESET;
 
-    if (m_recv_pos == (int)m_recv.length())
+    if (m_recv_pos == (int32_t)m_recv.length())
     {
         m_recv_pos = 0;
         m_recv.resize(0);
-        return POLARSSL_ERR_NET_WANT_READ;
+        return MBEDTLS_ERR_SSL_WANT_READ;
     }
 
     if (len > m_recv.length() - m_recv_pos)
         len = m_recv.length() - m_recv_pos;
 
     memcpy(buf, m_recv.c_str() + m_recv_pos, len);
-    m_recv_pos += (int)len;
+    m_recv_pos += (int32_t)len;
 
-    return (int)len;
+    return (int32_t)len;
 }
 
-int SslSocket::my_recv(void *ctx, unsigned char *buf, size_t len)
+int32_t SslSocket::my_recv(void *ctx, unsigned char *buf, size_t len)
 {
     return ((SslSocket *)ctx)->my_recv(buf, len);
 }
 
-int SslSocket::my_send(const unsigned char *buf, size_t len)
+int32_t SslSocket::my_send(const unsigned char *buf, size_t len)
 {
     if (!len)
         return 0;
 
     if (m_send.length() > 8192)
-        return POLARSSL_ERR_NET_WANT_WRITE;
+        return MBEDTLS_ERR_SSL_WANT_WRITE;
 
     m_send.append((const char *)buf, len);
-    return (int)len;
+    return (int32_t)len;
 }
 
-int SslSocket::my_send(void *ctx, const unsigned char *buf, size_t len)
+int32_t SslSocket::my_send(void *ctx, const unsigned char *buf, size_t len)
 {
     return ((SslSocket *)ctx)->my_send(buf, len);
 }
 
 result_t SslSocket::read(int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                         exlib::AsyncEvent *ac)
+                         AsyncEvent *ac)
 {
     class asyncRead: public asyncSsl
     {
     public:
         asyncRead(SslSocket *pThis, int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                  exlib::AsyncEvent *ac) :
+                  AsyncEvent *ac) :
             asyncSsl(pThis, ac), m_bytes(bytes), m_retVal(retVal)
         {
             if (m_bytes == -1)
@@ -177,9 +184,9 @@ result_t SslSocket::read(int32_t bytes, obj_ptr<Buffer_base> &retVal,
         }
 
     public:
-        virtual int process()
+        virtual int32_t process()
         {
-            int ret = ssl_read(&m_pThis->m_ssl, (unsigned char *)&m_buf[0], m_bytes);
+            int32_t ret = mbedtls_ssl_read(&m_pThis->m_ssl, (unsigned char *)&m_buf[0], m_bytes);
             if (ret > 0)
             {
                 m_buf.resize(ret);
@@ -187,15 +194,15 @@ result_t SslSocket::read(int32_t bytes, obj_ptr<Buffer_base> &retVal,
                 return 0;
             }
 
-            if (ret == POLARSSL_ERR_NET_WANT_READ ||
-                    ret == POLARSSL_ERR_NET_WANT_WRITE)
+            if (ret == MBEDTLS_ERR_SSL_WANT_READ ||
+                    ret == MBEDTLS_ERR_SSL_WANT_WRITE)
                 return ret;
 
             m_pThis->m_send.resize(0);
             return 0;
         }
 
-        virtual int finally()
+        virtual int32_t finally()
         {
             return m_retVal ? 0 : CALL_RETURN_NULL;
         }
@@ -215,12 +222,12 @@ result_t SslSocket::read(int32_t bytes, obj_ptr<Buffer_base> &retVal,
     return (new asyncRead(this, bytes, retVal, ac))->post(0);
 }
 
-result_t SslSocket::write(Buffer_base *data, exlib::AsyncEvent *ac)
+result_t SslSocket::write(Buffer_base *data, AsyncEvent *ac)
 {
     class asyncWrite: public asyncSsl
     {
     public:
-        asyncWrite(SslSocket *pThis, Buffer_base *data, exlib::AsyncEvent *ac) :
+        asyncWrite(SslSocket *pThis, Buffer_base *data, AsyncEvent *ac) :
             asyncSsl(pThis, ac)
         {
             data->toString(m_buf);
@@ -228,15 +235,16 @@ result_t SslSocket::write(Buffer_base *data, exlib::AsyncEvent *ac)
         }
 
     public:
-        virtual int process()
+        virtual int32_t process()
         {
-            int ret;
+            int32_t ret;
 
-            while ((ret = ssl_write(&m_pThis->m_ssl, (const unsigned char *)m_buf.c_str() + m_pos,
-                                    m_buf.length() - m_pos)) > 0)
+            while ((ret = mbedtls_ssl_write(&m_pThis->m_ssl,
+                                            (const unsigned char *)m_buf.c_str() + m_pos,
+                                            m_buf.length() - m_pos)) > 0)
             {
                 m_pos += ret;
-                if (m_pos == (int)m_buf.length())
+                if (m_pos == (int32_t)m_buf.length())
                     return 0;
             }
 
@@ -257,20 +265,25 @@ result_t SslSocket::write(Buffer_base *data, exlib::AsyncEvent *ac)
     return (new asyncWrite(this, data, ac))->post(0);
 }
 
-result_t SslSocket::close(exlib::AsyncEvent *ac)
+result_t SslSocket::close(AsyncEvent *ac)
 {
     class asyncClose: public asyncSsl
     {
     public:
-        asyncClose(SslSocket *pThis, exlib::AsyncEvent *ac) :
+        asyncClose(SslSocket *pThis, AsyncEvent *ac) :
             asyncSsl(pThis, ac)
         {
         }
 
-    public:
-        virtual int process()
+        ~asyncClose()
         {
-            return ssl_close_notify(&m_pThis->m_ssl);
+            m_pThis->m_s.Release();
+        }
+
+    public:
+        virtual int32_t process()
+        {
+            return mbedtls_ssl_close_notify(&m_pThis->m_ssl);
         }
     };
 
@@ -284,14 +297,14 @@ result_t SslSocket::close(exlib::AsyncEvent *ac)
 }
 
 result_t SslSocket::copyTo(Stream_base *stm, int64_t bytes,
-                           int64_t &retVal, exlib::AsyncEvent *ac)
+                           int64_t &retVal, AsyncEvent *ac)
 {
     return copyStream(this, stm, bytes, retVal, ac);
 }
 
 result_t SslSocket::get_verification(int32_t &retVal)
 {
-    retVal = m_ssl.authmode;
+    retVal = m_ssl_conf.authmode;
     return 0;
 }
 
@@ -300,7 +313,7 @@ result_t SslSocket::set_verification(int32_t newVal)
     if (newVal < ssl_base::_VERIFY_NONE || newVal > ssl_base::_VERIFY_REQUIRED)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    ssl_set_authmode(&m_ssl, newVal);
+    mbedtls_ssl_conf_authmode(&m_ssl_conf, newVal);
     return 0;
 }
 
@@ -315,7 +328,7 @@ result_t SslSocket::get_ca(obj_ptr<X509Cert_base> &retVal)
 
 result_t SslSocket::get_peerCert(obj_ptr<X509Cert_base> &retVal)
 {
-    const x509_crt *crt = ssl_get_peer_cert(&m_ssl);
+    const mbedtls_x509_crt *crt = mbedtls_ssl_get_peer_cert(&m_ssl);
 
     if (!crt)
         return CALL_RETURN_NULL;
@@ -331,26 +344,26 @@ result_t SslSocket::get_peerCert(obj_ptr<X509Cert_base> &retVal)
     return 0;
 }
 
-result_t SslSocket::handshake(int32_t *retVal, exlib::AsyncEvent *ac)
+result_t SslSocket::handshake(int32_t *retVal, AsyncEvent *ac)
 {
     class asyncHandshake: public asyncSsl
     {
     public:
-        asyncHandshake(SslSocket *pThis, int32_t *retVal, exlib::AsyncEvent *ac) :
+        asyncHandshake(SslSocket *pThis, int32_t *retVal, AsyncEvent *ac) :
             asyncSsl(pThis, ac), m_retVal(retVal)
         {
         }
 
     public:
-        virtual int process()
+        virtual int32_t process()
         {
-            return ssl_handshake(&m_pThis->m_ssl);
+            return mbedtls_ssl_handshake(&m_pThis->m_ssl);
         }
 
-        virtual int finally()
+        virtual int32_t finally()
         {
             if (m_retVal)
-                *m_retVal = ssl_get_verify_result(&m_pThis->m_ssl);
+                *m_retVal = mbedtls_ssl_get_verify_result(&m_pThis->m_ssl);
 
             return 0;
         }
@@ -363,7 +376,7 @@ result_t SslSocket::handshake(int32_t *retVal, exlib::AsyncEvent *ac)
 }
 
 result_t SslSocket::connect(Stream_base *s, const char *server_name,
-                            int32_t &retVal, exlib::AsyncEvent *ac)
+                            int32_t &retVal, AsyncEvent *ac)
 {
     if (m_s)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
@@ -371,23 +384,28 @@ result_t SslSocket::connect(Stream_base *s, const char *server_name,
     if (!ac)
         return CHECK_ERROR(CALL_E_NOSYNC);
 
+    int32_t ret;
     m_s = s;
-
-    ssl_set_endpoint(&m_ssl, SSL_IS_CLIENT);
 
     if (!m_ca)
         m_ca = g_ssl.ca();
 
-    ssl_set_ca_chain(&m_ssl, &m_ca->m_crt, NULL, NULL);
+    mbedtls_ssl_conf_ca_chain(&m_ssl_conf, &m_ca->m_crt, NULL);
+
+    ret = mbedtls_ssl_setup(&m_ssl, &m_ssl_conf);
+    if (ret != 0)
+        return CHECK_ERROR(_ssl::setError(ret));
+
+    mbedtls_ssl_set_bio(&m_ssl, this, my_send, my_recv, NULL);
 
     if (server_name && *server_name)
-        ssl_set_hostname(&m_ssl, server_name);
+        mbedtls_ssl_set_hostname(&m_ssl, server_name);
 
     return handshake(&retVal, ac);
 }
 
 result_t SslSocket::accept(Stream_base *s, obj_ptr<SslSocket_base> &retVal,
-                           exlib::AsyncEvent *ac)
+                           AsyncEvent *ac)
 {
     if (m_s)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
@@ -397,9 +415,10 @@ result_t SslSocket::accept(Stream_base *s, obj_ptr<SslSocket_base> &retVal,
 
     obj_ptr<SslSocket> ss = new SslSocket();
     retVal = ss;
-    int sz = (int)m_crts.size();
-    int i;
+    int32_t sz = (int32_t)m_crts.size();
+    int32_t i;
     result_t hr;
+    int32_t ret;
 
     for (i = 0; i < sz; i ++)
     {
@@ -409,18 +428,29 @@ result_t SslSocket::accept(Stream_base *s, obj_ptr<SslSocket_base> &retVal,
     }
 
     ss->m_s = s;
+    mbedtls_ssl_conf_authmode(&ss->m_ssl_conf, m_ssl_conf.authmode);
+    mbedtls_ssl_conf_endpoint(&ss->m_ssl_conf, MBEDTLS_SSL_IS_SERVER);
 
-    ssl_set_authmode(&ss->m_ssl, m_ssl.authmode);
-    ssl_set_endpoint(&ss->m_ssl, SSL_IS_SERVER);
+    ret = mbedtls_ssl_conf_dh_param( &ss->m_ssl_conf,
+                                     MBEDTLS_DHM_RFC5114_MODP_2048_P,
+                                     MBEDTLS_DHM_RFC5114_MODP_2048_G);
+    if (ret != 0)
+        return CHECK_ERROR(_ssl::setError(ret));
 
     if (m_ca)
     {
         ss->m_ca = m_ca;
-        ssl_set_ca_chain(&ss->m_ssl, &m_ca->m_crt, NULL, NULL);
+        mbedtls_ssl_conf_ca_chain(&ss->m_ssl_conf, &m_ca->m_crt, NULL);
     }
 
-    ssl_set_session_cache(&ss->m_ssl, ssl_cache_get, &g_ssl.m_cache,
-                          ssl_cache_set, &g_ssl.m_cache);
+    mbedtls_ssl_conf_session_cache(&ss->m_ssl_conf, &g_ssl.m_cache,
+                                   mbedtls_ssl_cache_get, mbedtls_ssl_cache_set);
+
+    ret = mbedtls_ssl_setup(&ss->m_ssl, &ss->m_ssl_conf);
+    if (ret != 0)
+        return CHECK_ERROR(_ssl::setError(ret));
+
+    mbedtls_ssl_set_bio(&ss->m_ssl, ss, my_send, my_recv, NULL);
 
     return ss->handshake(NULL, ac);
 }

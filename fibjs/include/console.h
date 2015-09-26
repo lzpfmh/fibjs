@@ -13,18 +13,20 @@
 #include "ifs/console.h"
 #include "ifs/coroutine.h"
 #include "ifs/fs.h"
+#include "File.h"
 
 namespace fibjs
 {
 
-class logger : public obj_base,
-    public exlib::OSThread
+#define LOGTIME true
+
+class logger : public AsyncEvent
 {
 public:
-    class item : public asyncEvent
+    class item : public exlib::linkitem
     {
     public:
-        item(int32_t priority, std::string msg) :
+        item(int32_t priority, std::string& msg) :
             m_priority(priority), m_msg(msg)
         {
             m_d.now();
@@ -32,7 +34,7 @@ public:
             if (exlib::Service::hasService())
             {
                 v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(
-                        Isolate::now().isolate, 1, v8::StackTrace::kOverview);
+                        Isolate::now()->m_isolate, 1, v8::StackTrace::kOverview);
 
                 if (stackTrace->GetFrameCount() > 0)
                 {
@@ -51,7 +53,7 @@ public:
             }
         }
 
-        std::string full()
+        std::string full(bool type = LOGTIME)
         {
             static const char *s_levels[] =
             {
@@ -68,10 +70,11 @@ public:
                 " "
             };
             std::string s;
+            if (type) {
+                m_d.sqlString(s);
+                s.append(" ", 1);
+            }
 
-            m_d.sqlString(s);
-
-            s.append(" ", 1);
             s.append(m_source);
 
             s.append(s_levels[m_priority]);
@@ -88,15 +91,12 @@ public:
     };
 
 public:
-    logger() : m_logEmpty(true), m_bStop(false)
+    logger() : m_bWorking(false), m_bStop(false)
     {
         int32_t i;
 
         for (i = 0; i < console_base::_NOTSET; i ++)
             m_levels[i] = true;
-
-        Ref();
-        start();
     }
 
     virtual result_t config(v8::Local<v8::Object> o)
@@ -132,69 +132,97 @@ public:
                 else
                     return CHECK_ERROR(Runtime::setError("console: too many logger."));
             }
+
+            m_levels[console_base::_PRINT] = true;
         }
 
         return 0;
     }
 
-    virtual void Run()
+    virtual int32_t post(int32_t v)
     {
-        Runtime rt;
-        DateCache dc;
-        rt.m_pDateCache = &dc;
+        result_t hr = v;
+        bool bStop = false;
 
-        Runtime::reg(&rt);
-
-        logger::item *p1, *p2, *pn;
-
-        while (!m_bStop)
+        do
         {
-            m_sem.Wait();
-
-            m_logEmpty = false;
-
-            p1 = (logger::item *)m_acLog.getList();
-            pn = NULL;
-
-            while (p1)
+            if (hr < 0)
             {
-                p2 = p1;
-                p1 = (logger::item *) p1->m_next;
-                p2->m_next = pn;
-                pn = p2;
+                m_lock.lock();
+                m_bWorking = false;
+                bStop = m_bStop;
+                m_lock.unlock();
+
+                break;
             }
 
-            if (pn)
-                write(pn);
+            m_lock.lock();
 
-            m_logEmpty = true;
-        }
+            m_acLog.getList(m_workinglogs);
+            if (m_workinglogs.empty()) {
+                m_bWorking = false;
+                bStop = m_bStop;
+                m_lock.unlock();
 
-        Unref();
+                break;
+            }
+
+            m_lock.unlock();
+
+            hr = write(this);
+        } while (hr != CALL_E_PENDDING);
+
+        if (bStop)
+            destroy();
+
+        return hr;
+    }
+
+    virtual void invoke()
+    {
+        post(0);
     }
 
 public:
-    virtual void write(item *pn) = 0;
+    virtual result_t write(AsyncEvent *ac) = 0;
 
-    void log(int priority, std::string msg)
+    void log(int32_t priority, std::string& msg)
     {
         if (priority >= 0 && priority < console_base::_NOTSET && m_levels[priority])
         {
-            m_acLog.put(new item(priority, msg));
-            m_sem.Post();
+            item* i = new item(priority, msg);
+
+            m_lock.lock();
+            m_acLog.putTail(i);
+            if (!m_bWorking)
+            {
+                m_bWorking = true;
+                async();
+            }
+            m_lock.unlock();
         }
     }
 
-    void flush()
+    void flush(bool bFiber)
     {
-        while (!m_acLog.empty() || !m_logEmpty)
-            coroutine_base::sleep(1);
+        while (!m_acLog.empty() || m_bWorking)
+            if (bFiber)
+                coroutine_base::ac_sleep(1);
+            else
+                exlib::OSThread::sleep(1);
     }
 
     void stop()
     {
-        m_bStop = true;
-        m_sem.Post();
+        m_lock.lock();
+        if (!m_bWorking)
+        {
+            destroy();
+            return;
+        }
+        else
+            m_bStop = true;
+        m_lock.unlock();
     }
 
 public:
@@ -220,32 +248,61 @@ public:
 
     static TextColor *get_std_color();
 
+protected:
+    exlib::List<item> m_workinglogs;
+
+    void destroy()
+    {
+        item* p1;
+        while ((p1 = m_acLog.getHead()) != 0)
+            delete p1;
+        delete this;
+    }
+
 private:
-    exlib::AsyncQueue m_acLog;
-    exlib::OSSemaphore m_sem;
-    bool m_logEmpty;
+    exlib::List<item> m_acLog;
+    bool m_bWorking;
     bool m_bStop;
+    exlib::spinlock m_lock;
     bool m_levels[console_base::_NOTSET];
 };
 
 class std_logger : public logger
 {
 public:
-    virtual void write(item *pn);
+    virtual result_t write(AsyncEvent *ac);
     static void out(const char *txt);
 };
 
 class sys_logger : public logger
 {
 public:
-    virtual void write(item *pn);
+    virtual result_t write(AsyncEvent *ac);
+};
+
+class stream_logger : public logger
+{
+public:
+    stream_logger(Stream_base* out) : m_out(out)
+    {}
+
+public:
+    virtual result_t write(AsyncEvent *ac);
+
+    void close()
+    {
+        m_out->ac_close();
+    }
+
+private:
+    obj_ptr<Stream_base> m_out;
 };
 
 class file_logger : public logger
 {
 public:
     virtual result_t config(v8::Local<v8::Object> o);
-    virtual void write(item *pn);
+    virtual result_t write(AsyncEvent *ac);
 
 private:
     void clearFile();
@@ -258,7 +315,7 @@ private:
     int64_t m_split_size;
     int32_t m_count;
 
-    obj_ptr<Stream_base> m_file;
+    obj_ptr<File> m_file;
     int64_t m_size;
     date_t m_date;
 };

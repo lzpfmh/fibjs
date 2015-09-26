@@ -8,21 +8,46 @@
 #ifndef ISOLATE_H_
 #define ISOLATE_H_
 
+#include <exlib/include/list.h>
+#include <exlib/include/service.h>
+
 namespace fibjs
 {
 
 class SandBox;
-class Isolate
+class JSFiber;
+class Isolate : public exlib::linkitem
 {
 public:
-	static Isolate &now();
+	class rt
+	{
+	public:
+		rt();
+		~rt();
+
+	public:
+		static bool g_trace;
+
+	private:
+		JSFiber *m_fiber;
+		v8::Unlocker unlocker;
+	};
+
+public:
+	Isolate();
+
+public:
+	static Isolate* now();
 	static void reg(void *rt);
 
 public:
-	v8::Isolate *isolate;
-	v8::Persistent<v8::Context> s_context;
-	v8::Persistent<v8::Object> s_global;
-	obj_ptr<SandBox> s_topSandbox;
+	exlib::Service *m_service;
+	v8::Isolate *m_isolate;
+	v8::Persistent<v8::Context> m_context;
+	v8::Persistent<v8::Object> m_global;
+	obj_ptr<SandBox> m_topSandbox;
+	exlib::List<exlib::linkitem> m_fibers;
+	bool m_test_setup_bbd, m_test_setup_tdd;
 };
 
 } /* namespace fibjs */

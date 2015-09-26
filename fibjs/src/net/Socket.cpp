@@ -33,12 +33,9 @@ Socket::~Socket()
     if (m_sock != INVALID_SOCKET)
     {
         if (exlib::Service::hasService())
-            ac_close();
+            asyncCall(::closesocket, m_sock);
         else
-        {
-            asyncEvent ac;
-            close(&ac);
-        }
+            ::closesocket(m_sock);
     }
 }
 
@@ -54,7 +51,7 @@ result_t Socket::create(int32_t family, int32_t type)
             ac_close();
         else
         {
-            asyncEvent ac;
+            AsyncEvent ac;
             close(&ac);
         }
     }
@@ -97,7 +94,7 @@ result_t Socket::create(int32_t family, int32_t type)
 
 #ifdef MacOS
 
-    int set_option = 1;
+    int32_t set_option = 1;
     setsockopt(m_sock, SOL_SOCKET, SO_NOSIGPIPE, &set_option,
                sizeof(set_option));
 
@@ -107,18 +104,18 @@ result_t Socket::create(int32_t family, int32_t type)
 }
 
 result_t Socket::read(int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                      exlib::AsyncEvent *ac)
+                      AsyncEvent *ac)
 {
     return recv(bytes, retVal, ac, bytes > 0);
 }
 
-result_t Socket::write(Buffer_base *data, exlib::AsyncEvent *ac)
+result_t Socket::write(Buffer_base *data, AsyncEvent *ac)
 {
     return send(data, ac);
 }
 
 result_t Socket::copyTo(Stream_base *stm, int64_t bytes,
-                        int64_t &retVal, exlib::AsyncEvent *ac)
+                        int64_t &retVal, AsyncEvent *ac)
 {
     if (m_sock == INVALID_SOCKET)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
@@ -126,7 +123,7 @@ result_t Socket::copyTo(Stream_base *stm, int64_t bytes,
     return copyStream(this, stm, bytes, retVal, ac);
 }
 
-result_t Socket::close(exlib::AsyncEvent *ac)
+result_t Socket::close(AsyncEvent *ac)
 {
     if (m_sock == INVALID_SOCKET)
         return 0;
@@ -246,7 +243,7 @@ result_t Socket::bind(const char *addr, int32_t port, bool allowIPv4)
     if (addr_info.addr(addr) < 0)
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
-    int on = 1;
+    int32_t on = 1;
 #ifndef _WIN32
     setsockopt(m_sock, SOL_SOCKET, SO_REUSEADDR, (const char *) &on, sizeof(on));
 #endif
@@ -276,7 +273,7 @@ result_t Socket::bind(int32_t port, bool allowIPv4)
     return bind(NULL, port, allowIPv4);
 }
 
-result_t Socket::listen(int32_t backlog, exlib::AsyncEvent *ac)
+result_t Socket::listen(int32_t backlog, AsyncEvent *ac)
 {
     if (m_sock == INVALID_SOCKET)
         return CHECK_ERROR(CALL_E_INVALID_CALL);
@@ -291,7 +288,7 @@ result_t Socket::listen(int32_t backlog, exlib::AsyncEvent *ac)
 }
 
 result_t Socket::recv(int32_t bytes, obj_ptr<Buffer_base> &retVal,
-                      exlib::AsyncEvent *ac)
+                      AsyncEvent *ac)
 {
     return recv(bytes, retVal, ac, false);
 }

@@ -37,23 +37,23 @@ inline result_t msgMethod(Message_base *msg, std::string &method)
     }
 
     msg->set_value(*p ? p + 1 : "");
-    method.assign(p1, (int) (p - p1));
+    method.assign(p1, (int32_t) (p - p1));
 
     return 0;
 }
 
 result_t JSHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
-                           exlib::AsyncEvent *ac)
+                           AsyncEvent *ac)
 {
     if (ac)
         return CHECK_ERROR(CALL_E_NOASYNC);
 
     v8::Local<v8::Object> o = v->wrap();
-    Isolate &isolate = Isolate::now();
+    Isolate* isolate = Isolate::now();
 
     obj_ptr<Message_base> msg = Message_base::getInstance(v);
-    v8::Local<v8::Value> a = v8::Local<v8::Value>::New(isolate.isolate, o);
-    v8::Local<v8::Value> hdlr = wrap()->GetHiddenValue(v8::String::NewFromUtf8(isolate.isolate, "handler"));
+    v8::Local<v8::Value> a = v8::Local<v8::Value>::New(isolate->m_isolate, o);
+    v8::Local<v8::Value> hdlr = wrap()->GetHiddenValue(v8::String::NewFromUtf8(isolate->m_isolate, "handler"));
 
     result_t hr;
     bool bResult = false;
@@ -92,12 +92,12 @@ result_t JSHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
                 pargv = &a;
 
             {
-                v8::TryCatch try_catch;
-                hdlr = func->Call(v8::Undefined(isolate.isolate), len + 1, pargv);
+                TryCatch try_catch;
+                hdlr = func->Call(v8::Undefined(isolate->m_isolate), len + 1, pargv);
                 if (try_catch.HasCaught())
                 {
                     v8::Local<v8::StackTrace> stackTrace = v8::StackTrace::CurrentStackTrace(
-                            isolate.isolate, 1, v8::StackTrace::kScriptId);
+                            isolate->m_isolate, 1, v8::StackTrace::kScriptId);
                     if (stackTrace->GetFrameCount() > 0)
                     {
                         try_catch.ReThrow();
@@ -133,9 +133,9 @@ result_t JSHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
                 return hr;
 
             hdlr = v8::Local<v8::Object>::Cast(hdlr)->Get(
-                       v8::String::NewFromUtf8(isolate.isolate, method.c_str(),
+                       v8::String::NewFromUtf8(isolate->m_isolate, method.c_str(),
                                                v8::String::kNormalString,
-                                               (int) method.length()));
+                                               (int32_t) method.length()));
             if (IsEmpty (hdlr))
                 return CHECK_ERROR(Runtime::setError("JSHandler: method \"" + method + "\" not found."));
 
@@ -154,49 +154,40 @@ result_t JSHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
 }
 
 result_t JSHandler::js_invoke(Handler_base *hdlr, object_base *v,
-                              obj_ptr<Handler_base> &retVal, exlib::AsyncEvent *ac)
+                              obj_ptr<Handler_base> &retVal, AsyncEvent *ac)
 {
-    class asyncInvoke: public asyncState
+    class asyncInvoke: public AsyncEvent
     {
     public:
         asyncInvoke(Handler_base *pThis, object_base *v,
-                    obj_ptr<Handler_base> &retVal, exlib::AsyncEvent *ac) :
-            asyncState(ac), m_pThis(pThis), m_v(v), m_retVal(retVal)
+                    obj_ptr<Handler_base> &retVal, AsyncEvent *ac) :
+            m_ac(ac), m_pThis(pThis), m_v(v), m_retVal(retVal)
         {
-            set(call);
         }
 
     public:
-        static int call(asyncState *pState, int n)
-        {
-            asyncInvoke *pThis = (asyncInvoke *) pState;
-
-            int v = pThis->done(CALL_E_PENDDING);
-            pThis->asyncEvent::post(0);
-            return v;
-        }
-
-    public:
-        virtual void js_callback()
+        virtual void js_invoke()
         {
             {
                 JSFiber::scope s;
-                m_hr = js_invoke(m_pThis, m_v, m_retVal, NULL);
+                m_hr = JSHandler::js_invoke(m_pThis, m_v, m_retVal, NULL);
                 if (m_hr == CALL_E_EXCEPTION)
                     m_message = Runtime::errMessage();
             }
 
-            s_acPool.put(this);
+            async();
         }
 
         virtual void invoke()
         {
             if (m_hr == CALL_E_EXCEPTION)
                 Runtime::setError(m_message);
-            post(m_hr);
+            m_ac->post(m_hr);
+            delete this;
         }
 
     private:
+        AsyncEvent *m_ac;
         obj_ptr<Handler_base> m_pThis;
         obj_ptr<object_base> m_v;
         obj_ptr<Handler_base> &m_retVal;
@@ -228,7 +219,8 @@ result_t JSHandler::js_invoke(Handler_base *hdlr, object_base *v,
         return 0;
     }
 
-    return (new asyncInvoke(hdlr, v, retVal, ac))->post(0);
+    (new asyncInvoke(hdlr, v, retVal, ac))->sync();
+    return CALL_E_PENDDING;
 }
 
 } /* namespace fibjs */

@@ -55,13 +55,13 @@ PacketHandler::PacketHandler() :
 }
 
 result_t PacketHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
-                               exlib::AsyncEvent *ac)
+                               AsyncEvent *ac)
 {
-    class asyncInvoke: public asyncState
+    class asyncInvoke: public AsyncState
     {
     public:
-        asyncInvoke(PacketHandler *pThis, Stream_base *stm, exlib::AsyncEvent *ac) :
-            asyncState(ac), m_pThis(pThis), m_stm(stm)
+        asyncInvoke(PacketHandler *pThis, Stream_base *stm, AsyncEvent *ac) :
+            AsyncState(ac), m_pThis(pThis), m_stm(stm)
         {
             m_stmBuffered = new BufferedStream(stm);
             m_msg = new PacketMessage(pThis->m_maxSize);
@@ -70,7 +70,7 @@ result_t PacketHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             set(read);
         }
 
-        static int read(asyncState *pState, int n)
+        static int32_t read(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
 
@@ -79,7 +79,7 @@ result_t PacketHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             return pThis->m_msg->readFrom(pThis->m_stmBuffered, pThis);
         }
 
-        static int invoke(asyncState *pState, int n)
+        static int32_t invoke(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
 
@@ -94,7 +94,7 @@ result_t PacketHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             return mq_base::invoke(pThis->m_pThis->m_hdlr, pThis->m_msg, pThis);
         }
 
-        static int send(asyncState *pState, int n)
+        static int32_t send(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
 
@@ -102,7 +102,7 @@ result_t PacketHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             return pThis->m_rep->sendTo(pThis->m_stm, pThis);
         }
 
-        static int end(asyncState *pState, int n)
+        static int32_t end(AsyncState *pState, int32_t n)
         {
             asyncInvoke *pThis = (asyncInvoke *) pState;
 
@@ -113,7 +113,7 @@ result_t PacketHandler::invoke(object_base *v, obj_ptr<Handler_base> &retVal,
             return 0;
         }
 
-        virtual int error(int v)
+        virtual int32_t error(int32_t v)
         {
             m_pThis->m_stats->inc(PACKET_ERROR);
 
@@ -184,7 +184,7 @@ result_t PacketHandler::get_handler(obj_ptr<Handler_base> &retVal)
 
 result_t PacketHandler::set_handler(Handler_base *newVal)
 {
-    wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now().isolate, "handler"), newVal->wrap());
+    wrap()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now()->m_isolate, "handler"), newVal->wrap());
     m_hdlr = newVal;
     return 0;
 }

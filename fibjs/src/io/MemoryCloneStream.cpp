@@ -14,12 +14,12 @@ namespace fibjs
 {
 
 result_t MemoryStream::CloneStream::read(int32_t bytes,
-        obj_ptr<Buffer_base> &retVal, exlib::AsyncEvent *ac)
+        obj_ptr<Buffer_base> &retVal, AsyncEvent *ac)
 {
     std::string strBuf;
 
-    int sz;
-    sz = (int) m_buffer.length() - m_pos;
+    int32_t sz;
+    sz = (int32_t) m_buffer.length() - m_pos;
 
     if (bytes < 0 || bytes > sz)
         bytes = sz;
@@ -29,7 +29,7 @@ result_t MemoryStream::CloneStream::read(int32_t bytes,
         if (m_pos == 0 && bytes == sz)
         {
             strBuf = m_buffer;
-            m_pos = (int) m_buffer.length();
+            m_pos = (int32_t) m_buffer.length();
         }
         else
         {
@@ -47,30 +47,30 @@ result_t MemoryStream::CloneStream::read(int32_t bytes,
 }
 
 result_t MemoryStream::CloneStream::readAll(obj_ptr<Buffer_base> &retVal,
-        exlib::AsyncEvent *ac)
+        AsyncEvent *ac)
 {
     return read(-1, retVal, ac);
 }
 
 result_t MemoryStream::CloneStream::write(Buffer_base *data,
-        exlib::AsyncEvent *ac)
+        AsyncEvent *ac)
 {
     return CHECK_ERROR(CALL_E_INVALID_CALL);
 }
 
-result_t MemoryStream::CloneStream::close(exlib::AsyncEvent *ac)
+result_t MemoryStream::CloneStream::close(AsyncEvent *ac)
 {
     return 0;
 }
 
 result_t MemoryStream::CloneStream::copyTo(Stream_base *stm, int64_t bytes,
-        int64_t &retVal, exlib::AsyncEvent *ac)
+        int64_t &retVal, AsyncEvent *ac)
 {
     return copyStream(this, stm, bytes, retVal, ac);
 }
 
 result_t MemoryStream::CloneStream::stat(obj_ptr<Stat_base> &retVal,
-        exlib::AsyncEvent *ac)
+        AsyncEvent *ac)
 {
     obj_ptr<Stat> st = new Stat();
 
@@ -87,18 +87,18 @@ result_t MemoryStream::CloneStream::stat(obj_ptr<Stat_base> &retVal,
 result_t MemoryStream::CloneStream::seek(int64_t offset, int32_t whence)
 {
     if (whence == fs_base::_SEEK_SET)
-        m_pos = (int) offset;
+        m_pos = (int32_t) offset;
     else if (whence == fs_base::_SEEK_CUR)
-        m_pos += (int) offset;
+        m_pos += (int32_t) offset;
     else if (whence == fs_base::_SEEK_END)
-        m_pos = (int) offset + (int) m_buffer.length();
+        m_pos = (int32_t) offset + (int32_t) m_buffer.length();
     else
         return CHECK_ERROR(CALL_E_INVALIDARG);
 
     if (m_pos < 0)
         m_pos = 0;
-    else if (m_pos > (int) m_buffer.length())
-        m_pos = (int) m_buffer.length();
+    else if (m_pos > (int32_t) m_buffer.length())
+        m_pos = (int32_t) m_buffer.length();
 
     return 0;
 }

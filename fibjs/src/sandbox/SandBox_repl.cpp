@@ -6,53 +6,164 @@
  */
 
 #include "SandBox.h"
-
 #include "ifs/process.h"
 #include "ifs/console.h"
 #include "ifs/util.h"
+#include "BufferedStream.h"
+#include "console.h"
+#include "parse.h"
 
 namespace fibjs
 {
 
-void repl_command(std::string &line)
+void output(int32_t priority, std::string msg)
 {
-    if (!qstrcmp(line.c_str(), ".help"))
+    if (priority == console_base::_ERROR)
+        msg = logger::error() + msg + COLOR_RESET;
+
+    if (priority != console_base::_PRINT)
+        msg += '\n';
+
+    asyncLog(console_base::_PRINT, msg);
+}
+
+bool repl_command(std::string &line, v8::Local<v8::Array> cmds)
+{
+    _parser p(line);
+    std::string cmd_word;
+    result_t hr;
+    int32_t len = cmds->Length();
+    int32_t i;
+
+    p.skipSpace();
+    p.getWord(cmd_word);
+
+    if (!qstrcmp(cmd_word.c_str(), ".help"))
     {
-        asyncLog(console_base::_INFO,
-                 ".exit   Exit the repl\n"
-                 ".help   Show repl options\n"
-                 ".info   Show fibjs build information"
-                );
-        return;
+        std::string help_str = ".exit     Exit the repl\n"
+                               ".help     Show repl options\n"
+                               ".info     Show fibjs build information";
+
+        for (i = 0; i < len; i ++)
+        {
+            v8::Local<v8::Value> v = cmds->Get(i);
+            v8::Local<v8::Object> o;
+            std::string cmd;
+            std::string help;
+
+            hr = GetArgumentValue(v, o, true);
+            if (hr >= 0)
+            {
+                hr = GetConfigValue(o, "cmd", cmd, true);
+                if (hr >= 0)
+                    hr = GetConfigValue(o, "help", help, true);
+            }
+
+            if (hr < 0)
+            {
+                output(console_base::_ERROR, "Invalid cmds argument.");
+                return false;
+            }
+
+            cmd.append(10, ' ');
+            help_str = help_str + "\n" + cmd.substr(0, 10) + help;
+        }
+
+        output(console_base::_INFO, help_str);
+        return true;
     }
 
-    if (!qstrcmp(line.c_str(), ".exit"))
-        process_base::exit(0);
+    if (!qstrcmp(cmd_word.c_str(), ".exit"))
+        return false;
 
-    if (!qstrcmp(line.c_str(), ".info"))
+    if (!qstrcmp(cmd_word.c_str(), ".info"))
     {
         v8::Local<v8::Object> o;
 
         util_base::buildInfo(o);
         console_base::dir(o);
-        return;
+        return true;
     }
+
+    for (i = 0; i < len; i ++)
+    {
+        v8::Local<v8::Value> v = cmds->Get(i);
+        v8::Local<v8::Object> o;
+        std::string cmd;
+        v8::Local<v8::Function> exec;
+
+        hr = GetArgumentValue(v, o, true);
+        if (hr >= 0)
+        {
+            hr = GetConfigValue(o, "cmd", cmd, true);
+            if (hr >= 0)
+                hr = GetConfigValue(o, "exec", exec, true);
+        }
+
+        if (hr < 0)
+        {
+            output(console_base::_ERROR, "Invalid cmds argument.");
+            return false;
+        }
+
+        if (!qstrcmp(cmd_word.c_str(), cmd.c_str()))
+        {
+            v8::Local<v8::Array> argv = v8::Array::New(Isolate::now()->m_isolate);
+            int32_t n = 0;
+
+            while (!cmd_word.empty())
+            {
+                argv->Set(n ++, GetReturnValue(cmd_word));
+                p.skipSpace();
+                p.getWord(cmd_word);
+            }
+
+            TryCatch try_catch;
+            v = argv;
+            v = exec->Call(o, 1, &v);
+            if (v.IsEmpty())
+                ReportException(try_catch, 0);
+            return true;
+        }
+    }
+
+    output(console_base::_ERROR, cmd_word + ": command not found.");
+    return true;
 }
 
-result_t SandBox::repl()
+result_t SandBox::repl(v8::Local<v8::Array> cmds, Stream_base* out)
 {
     Context context(this, "repl");
-    return Context::repl();
+    return Context::repl(cmds, out);
 }
 
-result_t SandBox::Context::repl()
+extern stream_logger* s_stream;
+extern std_logger* s_std;
+
+result_t SandBox::Context::repl(v8::Local<v8::Array> cmds, Stream_base* out)
 {
-    result_t hr;
+    result_t hr = 0;
     std::string buf;
     v8::Local<v8::Value> v, v1;
-    Isolate &isolate = Isolate::now();
-    v8::Local<v8::String> strFname = v8::String::NewFromUtf8(isolate.isolate, "repl",
+    Isolate* isolate = Isolate::now();
+    v8::Local<v8::String> strFname = v8::String::NewFromUtf8(isolate->m_isolate, "repl",
                                      v8::String::kNormalString, 4);
+    obj_ptr<BufferedStream_base> bs;
+    stream_logger* logger = NULL;
+
+    if (out)
+    {
+        if ((logger = s_stream) != NULL)
+        {
+            s_stream = NULL;
+            logger->close();
+        }
+
+        s_stream = logger = new stream_logger(out);
+        bs = new BufferedStream(out);
+    }
+
+    output(console_base::_INFO, "Type \".help\" for more information.");
 
     while (true)
     {
@@ -62,16 +173,25 @@ result_t SandBox::Context::repl()
         v = v1;
 
         std::string line;
-        hr = console_base::ac_readLine(buf.empty() ? "> " : " ... ", line);
+        if (out)
+        {
+            output(console_base::_PRINT, buf.empty() ? "> " : " ... ");
+            hr = bs->ac_readLine(-1, line);
+            if (hr >= 0)
+                s_std->log(console_base::_INFO, line);
+        } else
+            hr = console_base::ac_readLine(buf.empty() ? "> " : " ... ", line);
+
         if (hr < 0)
-            return hr;
+            break;
 
         if (line.empty())
             continue;
 
         if (line[0] == '.')
         {
-            repl_command(line);
+            if (!repl_command(line, cmds))
+                break;
             continue;
         }
 
@@ -80,11 +200,11 @@ result_t SandBox::Context::repl()
 
         {
             v8::Local<v8::Script> script;
-            v8::TryCatch try_catch;
+            TryCatch try_catch;
 
             script = v8::Script::Compile(
-                         v8::String::NewFromUtf8(isolate.isolate, buf.c_str(),
-                                                 v8::String::kNormalString, (int) buf.length()),
+                         v8::String::NewFromUtf8(isolate->m_isolate, buf.c_str(),
+                                                 v8::String::kNormalString, (int32_t) buf.length()),
                          strFname);
             if (script.IsEmpty())
             {
@@ -105,7 +225,15 @@ result_t SandBox::Context::repl()
         }
     }
 
-    return 0;
+    if (out)
+    {
+        if (logger == s_stream)
+            s_stream = NULL;
+
+        delete logger;
+    }
+
+    return hr;
 }
 
 }

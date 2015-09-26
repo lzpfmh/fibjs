@@ -6,6 +6,7 @@
  */
 
 #include "ifs/SandBox.h"
+#include "ifs/Stream.h"
 #include <map>
 
 #ifndef SANDBOX_H_
@@ -33,24 +34,24 @@ public:
     virtual result_t addScript(const char *srcname, const char *script, v8::Local<v8::Value> &retVal);
     virtual result_t remove(const char *id);
     virtual result_t clone(obj_ptr<SandBox_base> &retVal);
-    virtual result_t run(const char *fname);
+    virtual result_t run(const char *fname, v8::Local<v8::Array> argv);
     virtual result_t require(const char *id, v8::Local<v8::Value> &retVal);
 
 public:
     v8::Local<v8::Object> mods()
     {
-        Isolate &isolate = Isolate::now();
+        Isolate* isolate = Isolate::now();
 
         const char *mods_name = "_mods";
-        v8::Local<v8::Value> v = wrap()->GetHiddenValue(v8::String::NewFromUtf8(isolate.isolate, mods_name));
+        v8::Local<v8::Value> v = wrap()->GetHiddenValue(v8::String::NewFromUtf8(isolate->m_isolate, mods_name));
         v8::Local<v8::Object> o;
 
         if (!v.IsEmpty())
             o = v->ToObject();
         else
         {
-            o = v8::Object::New(isolate.isolate);
-            wrap()->SetHiddenValue(v8::String::NewFromUtf8(isolate.isolate, mods_name), o);
+            o = v8::Object::New(isolate->m_isolate);
+            wrap()->SetHiddenValue(v8::String::NewFromUtf8(isolate->m_isolate, mods_name), o);
         }
 
         return o;
@@ -59,17 +60,19 @@ public:
     void initRoot();
     void initRequire(v8::Local<v8::Function> func)
     {
-        mods()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now().isolate, "require"), func);
+        mods()->SetHiddenValue(v8::String::NewFromUtf8(Isolate::now()->m_isolate, "require"), func);
     }
 
     void InstallModule(std::string fname, v8::Local<v8::Value> o);
     inline void InstallNativeModule(const char *fname, ClassInfo &ci)
     {
-        InstallModule(fname, ci.CreateInstance());
+        InstallModule(fname, ci.getFunction());
     }
 
     result_t require(std::string base, std::string id, v8::Local<v8::Value> &retVal, int32_t mode);
-    result_t repl();
+    result_t repl(v8::Local<v8::Array> cmds, Stream_base* out = NULL);
+
+    result_t run(const char *fname, v8::Local<v8::Array> argv, v8::Local<v8::Value> replFunc);
 
     std::string name()
     {
@@ -84,11 +87,11 @@ public:
 
         result_t run(std::string src, const char *name, const char **argNames,
                      v8::Local<v8::Value> *args, int32_t argCount);
-        result_t run(std::string src, const char *name);
+        result_t run(std::string src, const char *name, v8::Local<v8::Array> argv, v8::Local<v8::Value> replFunc);
         result_t run(std::string src, const char *name, v8::Local<v8::Object> module,
                      v8::Local<v8::Object> exports);
 
-        static result_t repl();
+        static result_t repl(v8::Local<v8::Array> cmds, Stream_base* out);
 
     public:
         obj_ptr<SandBox> m_sb;

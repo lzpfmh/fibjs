@@ -217,7 +217,7 @@ void Url::parsePath(const char *&url)
     }
 
     if (m_protocol.compare("javascript:"))
-        Url::encodeURI(m_pathname.c_str(), (int) m_pathname.length(),
+        Url::encodeURI(m_pathname.c_str(), (int32_t) m_pathname.length(),
                        m_pathname, pathTable);
     url = p;
 }
@@ -234,7 +234,7 @@ void Url::parseQuery(const char *&url)
         p++;
 
     m_query.assign(url, p - url);
-    Url::encodeURI(m_query.c_str(), (int) m_query.length(), m_query,
+    Url::encodeURI(m_query.c_str(), (int32_t) m_query.length(), m_query,
                    queryTable);
     url = p;
 }
@@ -281,7 +281,7 @@ std::string getValue(v8::Local<v8::Object> &args, const char *key)
 {
     std::string s;
 
-    v8::Local<v8::Value> v = args->Get(v8::String::NewFromUtf8(Isolate::now().isolate, key));
+    v8::Local<v8::Value> v = args->Get(v8::String::NewFromUtf8(Isolate::now()->m_isolate, key));
 
     if (!v.IsEmpty() && v->IsString())
         s = *v8::String::Utf8Value(v);
@@ -315,7 +315,7 @@ result_t Url::format(v8::Local<v8::Object> args)
     if (m_slashes && m_protocol.compare("file:") && m_hostname.length() == 0)
         m_slashes = false;
 
-    v8::Local<v8::Value> v = args->Get(v8::String::NewFromUtf8(Isolate::now().isolate, "slashes"));
+    v8::Local<v8::Value> v = args->Get(v8::String::NewFromUtf8(Isolate::now()->m_isolate, "slashes"));
 
     if (!IsEmpty(v))
         m_slashes = v->BooleanValue();
@@ -408,8 +408,8 @@ result_t Url::normalize()
     std::string str;
     const char *p1 = m_pathname.c_str();
     char *pstr;
-    int pos = 0;
-    int root = 0;
+    int32_t pos = 0;
+    int32_t root = 0;
     bool bRoot = false;
 
     str.resize(m_pathname.length());
@@ -514,7 +514,7 @@ void Url::put_protocol(std::string str)
         "http:", "https:", "ftp:", "gopher:", "file:", "http:", "https:", "ftp:",
         "gopher:", "file:"
     };
-    int i;
+    int32_t i;
 
     m_protocol = str;
     m_defslashes = false;
@@ -525,7 +525,7 @@ void Url::put_protocol(std::string str)
         if (m_protocol[m_protocol.length() - 1] != ':')
             m_protocol.append(1, ':');
 
-        for (i = 0; i < (int) (sizeof(s_slashed) / sizeof(const char *)); i++)
+        for (i = 0; i < (int32_t) (sizeof(s_slashed) / sizeof(const char *)); i++)
             if (!m_protocol.compare(s_slashed[i]))
             {
                 m_defslashes = true;
