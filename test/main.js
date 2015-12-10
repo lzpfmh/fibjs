@@ -3,9 +3,6 @@
 var test = require("test");
 var coroutine = require('coroutine');
 var process = require('process');
-var path = require('path');
-
-process.chdir(path.dirname(path.fullpath(process.argv[1])));
 
 run("assert_test.js");
 run("expect_test.js");
@@ -46,6 +43,7 @@ run("db_test.js");
 run("profiler_test.js");
 
 run('BUG_simple_api_call.js');
+// run("mongo_test.js");
 
 coroutine.start(function() {
 	process.exit(-test.run());

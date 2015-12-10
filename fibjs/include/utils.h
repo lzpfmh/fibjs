@@ -37,6 +37,7 @@
 #else
 
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -525,6 +526,8 @@ result_t GetArgumentValue(v8::Local<v8::Value> v, obj_ptr<T> &vr, bool bStrict =
 
         if (vr == NULL)
             return CALL_E_INVALIDARG;
+
+        vr->dispose();
     }
 
     return 0;

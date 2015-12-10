@@ -10,6 +10,7 @@
 #include "Map.h"
 #include <mbedtls/mbedtls/sha1.h>
 #include "encoding.h"
+#include <stdlib.h>
 
 namespace fibjs
 {
@@ -79,7 +80,7 @@ result_t websocket_base::connect(const char* url, obj_ptr<Stream_base>& retVal,
 			int32_t status;
 
 			pThis->m_httprep->get_status(status);
-			if (status != 200)
+			if (status != 101)
 				return CHECK_ERROR(Runtime::setError("websocket: server error."));
 
 			hr = pThis->m_httprep->firstHeader("Upgrade", v);
